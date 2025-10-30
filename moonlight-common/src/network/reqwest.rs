@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use bytes::Bytes;
+use log::debug;
 use pem::Pem;
 use reqwest::{Certificate, Client, ClientBuilder, Identity};
 use thiserror::Error;
@@ -45,6 +46,8 @@ fn build_url(
 
     let authority = format!("{protocol}://{hostport}/{path}");
     let url = Url::parse_with_params(&authority, query_params)?;
+
+    debug!("Request: {url}");
 
     Ok(url)
 }

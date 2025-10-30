@@ -579,6 +579,7 @@ mod stream {
             color_range: ColorRange,
             bitrate: u32,
             packet_size: u32,
+            encryption_flags: EncryptionFlags,
             connection_listener: impl ConnectionListener + Send + Sync + 'static,
             video_decoder: impl VideoDecoder + Send + Sync + 'static,
             audio_decoder: impl AudioDecoder + Send + Sync + 'static,
@@ -626,7 +627,7 @@ mod stream {
 
             let mut aes_iv = [0u8; 4];
             rand_bytes(&mut aes_iv).map_err(PairError::from)?;
-            let aes_iv = i32::from_be_bytes(aes_iv);
+            let aes_iv = u32::from_be_bytes(aes_iv);
 
             let request = ClientStreamRequest {
                 app_id,
@@ -692,12 +693,12 @@ mod stream {
                     bitrate: bitrate as i32,
                     packet_size: packet_size as i32,
                     streaming_remotely: StreamingConfig::Auto,
-                    audio_configuration: audio_decoder.config().0 as i32,
+                    audio_configuration: audio_decoder.config().raw() as i32,
                     supported_video_formats: video_decoder.supported_formats(),
                     client_refresh_rate_x100: (fps * 100) as i32,
                     color_space,
                     color_range,
-                    encryption_flags: EncryptionFlags::empty(),
+                    encryption_flags,
                     remote_input_aes_key: aes_key,
                     remote_input_aes_iv: aes_iv,
                 };
