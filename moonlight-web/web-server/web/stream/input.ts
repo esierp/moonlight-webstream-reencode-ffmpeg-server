@@ -156,6 +156,10 @@ export class StreamInput {
 
     // -- Keyboard
     onKeyDown(event: KeyboardEvent) {
+        if ("repeat" in event && event.repeat) {
+            return
+        }
+
         this.sendKeyEvent(true, event)
     }
     onKeyUp(event: KeyboardEvent) {
