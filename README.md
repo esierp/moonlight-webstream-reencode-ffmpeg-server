@@ -38,7 +38,7 @@ It hosts Web Server which will forward [Sunshine](https://docs.lizardbyte.dev/pr
 
 1. Install [Sunshine](https://github.com/LizardByte/Sunshine/blob/v2025.628.4510/docs/getting_started.md)
 
-2. Download the [compressed archive](https://github.com/MrCreativ3001/moonlight-web-stream/releases) for your platform and uncompress it or [build it yourself](#building)
+2. Download the [compressed archive](https://github.com/MrCreativ3001/moonlight-web-stream/releases/latest) for your platform and uncompress it or [build it yourself](#building)
 
 3. Run the "web-server" executable
 
