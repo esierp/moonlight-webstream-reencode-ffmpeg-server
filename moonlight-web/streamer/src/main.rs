@@ -122,9 +122,9 @@ async fn main() {
                 host_address,
                 host_http_port,
                 host_unique_id,
-                client_private_key: client_private_key,
-                client_certificate: client_certificate,
-                server_certificate: server_certificate,
+                client_private_key,
+                client_certificate,
+                server_certificate,
                 app_id,
             }) => {
                 debug!(

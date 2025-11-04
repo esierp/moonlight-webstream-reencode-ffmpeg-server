@@ -23,6 +23,8 @@ mod web;
 
 #[actix_web::main]
 async fn main() {
+    // TODO: log config
+
     #[cfg(debug_assertions)]
     let log_level = LevelFilter::Debug;
     #[cfg(not(debug_assertions))]
