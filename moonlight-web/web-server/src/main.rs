@@ -6,7 +6,11 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader, stdin},
 };
 
-use actix_web::{App as ActixApp, HttpServer, middleware::Logger, web::Data};
+use actix_web::{
+    App as ActixApp, HttpServer,
+    middleware::{self, Logger},
+    web::Data,
+};
 use log::{Level, LevelFilter, info};
 use serde::{Serialize, de::DeserializeOwned};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
@@ -74,6 +78,16 @@ async fn main2() -> Result<(), anyhow::Error> {
                     Logger::new("%r took %D ms")
                         .log_target("http_log")
                         .log_level(Level::Debug),
+                )
+                .wrap(
+                    // TODO: maybe only re cache when required?
+                    middleware::DefaultHeaders::new()
+                        .add((
+                            "Cache-Control",
+                            "no-store, no-cache, must-revalidate, private",
+                        ))
+                        .add(("Pragma", "no-cache"))
+                        .add(("Expires", "0")),
                 )
                 .service(api_service())
                 .service(web_config_js_service())
