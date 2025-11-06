@@ -5,7 +5,10 @@ edition = "2024"
 license = { workspace = true }
 
 [dependencies]
-moonlight-common = { workspace = true, features = ["high", "backend_reqwest"] }
+moonlight-common = { workspace = true, features = [
+    "high",
+    "backend_hyper_openssl",
+] }
 common = { path = "../common" }
 
 tokio = { workspace = true, features = ["fs"] }

@@ -1,4 +1,4 @@
-use std::{panic, process::exit, str::FromStr, sync::Arc};
+use std::{panic, process::exit, sync::Arc};
 
 use common::{
     StreamSettings,
@@ -10,8 +10,8 @@ use common::{
 use log::{LevelFilter, debug, info, warn};
 use moonlight_common::{
     MoonlightError,
-    high::HostError,
-    network::reqwest::ReqwestMoonlightHost,
+    high::{HostError, MoonlightHost},
+    network::backend::hyper_openssl::HyperOpenSSLClient,
     pair::ClientAuth,
     stream::{
         MoonlightInstance, MoonlightStream,
@@ -61,6 +61,8 @@ use crate::{
     input::StreamInput,
     video::{TrackSampleVideoDecoder, register_video_codecs},
 };
+
+pub type RequestClient = HyperOpenSSLClient;
 
 mod audio;
 mod buffer;
@@ -162,7 +164,7 @@ async fn main() {
 
     // -- Create the host and pair it
     // TODO: hosts should use the old mutable way!
-    let mut host = ReqwestMoonlightHost::new(host_address, host_http_port, host_unique_id)
+    let mut host = MoonlightHost::new(host_address, host_http_port, host_unique_id)
         .expect("failed to create host");
 
     host.set_pairing_info(
@@ -280,7 +282,7 @@ async fn main() {
 }
 
 struct StreamInfo {
-    host: Mutex<ReqwestMoonlightHost>,
+    host: Mutex<MoonlightHost<RequestClient>>,
     app_id: u32,
 }
 

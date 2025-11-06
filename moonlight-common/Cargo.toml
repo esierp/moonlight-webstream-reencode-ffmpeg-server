@@ -29,6 +29,12 @@ form_urlencoded = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["default"], optional = true }
 bytes = { workspace = true, optional = true }
 
+# Network Hyper OpenSSL backend
+hyper = { workspace = true, features = ["http1", "client"], optional = true }
+hyper-openssl = { workspace = true, optional = true }
+hyper-util = { workspace = true, features = ["tokio"], optional = true }
+http-body-util = { workspace = true, optional = true }
+
 # High
 tokio = { workspace = true, features = [
     "rt",
@@ -68,6 +74,17 @@ backend_reqwest = [
     "reqwest/native-tls",
     "dep:tokio",
     "dep:bytes",
+    "dep:log",
+]
+# Hyper OpenSSL Network Backend
+backend_hyper_openssl = [
+    "dep:tokio",
+    "dep:hyper",
+    "dep:hyper-openssl",
+    "dep:hyper-util",
+    "dep:http-body-util",
+    "dep:bytes",
+    "dep:log",
 ]
 
 serde = ["dep:serde"]

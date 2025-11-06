@@ -12,7 +12,6 @@ use moonlight_common::{
     network::{
         self, ApiError, ClientAppBoxArtRequest, ClientInfo, HostInfo, host_app_box_art,
         host_app_list, host_cancel, host_info, request_client::RequestClient,
-        reqwest::ReqwestError,
     },
     pair::{PairSuccess, generate_new_client, host_pair},
 };
@@ -195,15 +194,16 @@ impl Host {
 
     fn is_offline<T>(
         &self,
-        result: Result<T, ApiError<ReqwestError>>,
+        result: Result<T, ApiError<<MoonlightClient as RequestClient>::Error>>,
     ) -> Result<Option<T>, AppError> {
         match result {
             Ok(value) => Ok(Some(value)),
-            Err(ApiError::RequestClient(ReqwestError::Reqwest(err)))
-                if err.is_timeout() || err.is_connect() =>
-            {
-                Ok(None)
-            }
+            // TODO
+            // Err(ApiError::RequestClient(ReqwestError::Reqwest(err)))
+            //     if err.is_timeout() || err.is_connect() =>
+            // {
+            //     Ok(None)
+            // }
             Err(err) => Err(AppError::MoonlightApi(err)),
         }
     }
@@ -243,12 +243,13 @@ impl Host {
                         Ok(new_info) => {
                             info = new_info;
                         }
-                        Err(ApiError::RequestClient(ReqwestError::Reqwest(err)))
-                            if err.is_request() =>
-                        {
-                            // The host likely removed our paired certificate
-                            warn!("Host {this:?} has an error related to a request {err:?}. This likely happened because the device was removed from sunshine.");
-                        }
+                        // TODO
+                        // Err(ApiError::RequestClient(ReqwestError::Reqwest(err)))
+                        //     if err.is_request() =>
+                        // {
+                        //     // The host likely removed our paired certificate
+                        //     warn!("Host {this:?} has an error related to a request {err:?}. This likely happened because the device was removed from sunshine.");
+                        // }
                         Err(err) => return Err(err.into()),
                     }
                 }

@@ -7,7 +7,9 @@ use std::{
 use actix_web::{HttpResponse, ResponseError, http::StatusCode, web::Bytes};
 use common::config::Config;
 use hex::FromHexError;
-use moonlight_common::network::{ApiError, request_client::RequestClient, reqwest::ReqwestClient};
+use moonlight_common::network::{
+    ApiError, backend::hyper_openssl::HyperOpenSSLClient, request_client::RequestClient,
+};
 use openssl::error::ErrorStack;
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -109,7 +111,7 @@ struct AppInner {
     app_image_cache: RwLock<HashMap<(UserId, HostId, AppId), Bytes>>,
 }
 
-pub type MoonlightClient = ReqwestClient;
+pub type MoonlightClient = HyperOpenSSLClient;
 
 pub struct App {
     inner: Arc<AppInner>,

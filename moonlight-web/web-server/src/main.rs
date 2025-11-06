@@ -76,7 +76,7 @@ async fn main2() -> Result<(), anyhow::Error> {
                 .app_data(app.clone())
                 .wrap(
                     Logger::new("%r took %D ms")
-                        .log_target("http_log")
+                        .log_target("http_server")
                         .log_level(Level::Debug),
                 )
                 .wrap(

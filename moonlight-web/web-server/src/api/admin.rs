@@ -6,7 +6,7 @@ use common::api_bindings::{
     DeleteUserRequest, DetailedUser, GetUsersResponse, PatchUserRequest, PostUserRequest,
 };
 use futures::future::join_all;
-use log::{debug, info, warn};
+use log::warn;
 
 use crate::app::{
     App, AppError,
