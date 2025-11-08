@@ -47,9 +47,11 @@ impl From<api_bindings::UserRole> for Role {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UserId(pub u32);
 
+#[derive(Clone)]
 pub struct User {
     pub(super) app: AppRef,
     pub(super) id: UserId,
+    // TODO: maybe arc this because the user is getting cloned?
     pub(super) cache_storage: Option<StorageUser>,
 }
 
@@ -158,6 +160,7 @@ impl User {
     }
 }
 
+#[derive(Clone)]
 pub struct AuthenticatedUser {
     pub(super) inner: User,
 }

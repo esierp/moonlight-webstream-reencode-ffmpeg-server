@@ -5,7 +5,7 @@ import { ApiUserPasswordPrompt } from "./component/modal/login.js";
 import { buildUrl, isUserPasswordAuthenticationEnabled } from "./config_.js";
 
 // IMPORTANT: this should be a bit bigger than the moonlight-common reqwest backend timeout if some hosts are offline!
-const API_TIMEOUT = 6000
+const API_TIMEOUT = 12000
 
 let currentApi: Api | null = null
 
@@ -67,7 +67,7 @@ export function isDetailedHost(host: UndetailedHost | DetailedHost): host is Det
     return (host as DetailedHost).https_port !== undefined
 }
 
-function buildRequest(api: Api, endpoint: string, method: string, init?: { response?: "json" | "ignore" } & ApiFetchInit): [string, RequestInit] {
+function buildRequest(api: Api, endpoint: string, method: string, init?: ApiFetchInit): [string, RequestInit] {
     // Remove all null values from query, these cause problems in rust
     if (init?.query != null) {
         for (const key in init?.query) {
@@ -128,10 +128,46 @@ export class FetchError extends Error {
     }
 }
 
+class StreamedJsonResponse<Initial, Other> {
+    response: Initial
+
+    private reader
+    private decoder = new TextDecoder()
+    private bufferedText = ""
+
+    constructor(body: ReadableStreamDefaultReader, response: Initial) {
+        this.reader = body
+        this.response = response
+    }
+
+    async next(): Promise<Other | null> {
+        while (true) {
+            const { done, value } = await this.reader.read()
+
+            if (done) {
+                return null
+            }
+
+            this.bufferedText += this.decoder.decode(value)
+
+            const split = this.bufferedText.split("\n", 2)
+            if (split.length == 2) {
+                this.bufferedText = split[1]
+
+                const text = split[0]
+                const json = JSON.parse(text)
+
+                return json
+            }
+        }
+    }
+}
+
 export async function fetchApi(api: Api, endpoint: string, method: string, init?: { response?: "json" } & ApiFetchInit): Promise<any>
 export async function fetchApi(api: Api, endpoint: string, method: string, init: { response: "ignore" } & ApiFetchInit): Promise<Response>
+export async function fetchApi<Initial, Other>(api: Api, endpoint: string, method: string, init: { response: "jsonStreaming" } & ApiFetchInit): Promise<StreamedJsonResponse<Initial, Other>>
 
-export async function fetchApi(api: Api, endpoint: string, method: string = GET, init?: { response?: "json" | "ignore" } & ApiFetchInit) {
+export async function fetchApi(api: Api, endpoint: string, method: string = GET, init?: { response?: "json" | "ignore" | "jsonStreaming" } & ApiFetchInit) {
     const [url, request] = buildRequest(api, endpoint, method, init)
 
     const timeoutAbort = new AbortController()
@@ -161,6 +197,18 @@ export async function fetchApi(api: Api, endpoint: string, method: string = GET,
         const json = await response.json()
 
         return json
+    } else if (init?.response == "jsonStreaming") {
+        if (!response.body) {
+            // TODO: error
+            throw "TODO"
+        }
+
+        // @ts-ignore
+        const stream = new StreamedJsonResponse(response.body?.getReader())
+        const data = await stream.next()
+        stream.response = data
+
+        return stream
     }
 }
 
@@ -246,10 +294,8 @@ export async function apiDeleteUser(api: Api, data: DeleteUserRequest): Promise<
     })
 }
 
-export async function apiGetHosts(api: Api): Promise<Array<UndetailedHost>> {
-    const response = await fetchApi(api, "/hosts", GET)
-
-    return (response as GetHostsResponse).hosts
+export async function apiGetHosts(api: Api): Promise<StreamedJsonResponse<GetHostsResponse, UndetailedHost>> {
+    return await fetchApi<GetHostsResponse, UndetailedHost>(api, "/hosts", GET, { response: "jsonStreaming" })
 }
 export async function apiGetHost(api: Api, query: GetHostQuery): Promise<DetailedHost> {
     const response = await fetchApi(api, "/host", GET, { query })

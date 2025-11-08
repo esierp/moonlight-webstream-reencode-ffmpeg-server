@@ -4,12 +4,16 @@ use actix_web::{
     get, post, put, services,
     web::{self, Bytes, Data, Json, Query},
 };
-use log::{info, warn};
+use log::{error, info, warn};
 use moonlight_common::PairPin;
 use std::io::Write as _;
+use tokio::spawn;
 
 use crate::{
-    api::admin::{add_user, delete_user, list_users, patch_user},
+    api::{
+        admin::{add_user, delete_user, list_users, patch_user},
+        response_streaming::StreamedResponse,
+    },
     app::{
         App, AppError,
         host::{AppId, HostId},
@@ -20,11 +24,14 @@ use common::api_bindings::{
     self, DeleteHostQuery, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse,
     GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, PairStatus, PostPairRequest,
     PostPairResponse1, PostPairResponse2, PostWakeUpRequest, PutHostRequest, PutHostResponse,
+    UndetailedHost,
 };
 
 pub mod admin;
 pub mod auth;
 pub mod stream;
+
+pub mod response_streaming;
 
 #[get("/user")]
 async fn get_user(
@@ -60,13 +67,19 @@ async fn get_user(
 
 // TODO: use response streaming to have longer timeouts on each individual host with json new line format
 #[get("/hosts")]
-async fn list_hosts(mut user: AuthenticatedUser) -> Result<Json<GetHostsResponse>, AppError> {
+async fn list_hosts(
+    mut user: AuthenticatedUser,
+) -> Result<StreamedResponse<GetHostsResponse, UndetailedHost>, AppError> {
+    let (mut stream_response, stream_sender) =
+        StreamedResponse::new(GetHostsResponse { hosts: Vec::new() });
+
     let hosts = user.hosts().await?;
 
     let mut undetailed_hosts = Vec::with_capacity(hosts.len());
     // TODO: do this parallel?
     for mut host in hosts {
-        let undetailed = match host.undetailed_host(&mut user).await {
+        // First query db
+        let undetailed_cache = match host.undetailed_host_cached(&mut user).await {
             Ok(value) => value,
             Err(err) => {
                 // TODO: try to push the host based on cache and show error?
@@ -75,12 +88,32 @@ async fn list_hosts(mut user: AuthenticatedUser) -> Result<Json<GetHostsResponse
             }
         };
 
-        undetailed_hosts.push(undetailed);
+        undetailed_hosts.push(undetailed_cache);
+
+        // Then send http request now
+        let mut user = user.clone();
+        let stream_sender = stream_sender.clone();
+
+        spawn(async move {
+            let undetailed = match host.undetailed_host(&mut user).await {
+                Ok(value) => value,
+                Err(err) => {
+                    error!("Failed to get undetailed host of {host:?}: {err:?}");
+                    // TODO: what to do now?
+                    return;
+                }
+            };
+
+            // TODO: remove unwraps
+            stream_sender.send(undetailed).await.unwrap();
+        });
     }
 
-    Ok(Json(GetHostsResponse {
+    stream_response.set_initial(GetHostsResponse {
         hosts: undetailed_hosts,
-    }))
+    });
+
+    Ok(stream_response)
 }
 
 #[get("/host")]
@@ -142,6 +175,7 @@ async fn pair_host(
         return Ok(HttpResponse::NotModified().finish());
     }
 
+    // TODO: move to response_streaming.rs
     let stream = async_stream::stream! {
         // Generate pin
         let Ok(pin) = PairPin::generate() else {

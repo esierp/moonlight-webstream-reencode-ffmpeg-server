@@ -87,6 +87,8 @@ impl Host {
         user: &mut AuthenticatedUser,
         modify: StorageHostModify,
     ) -> Result<(), AppError> {
+        self.can_use(user).await?;
+
         let app = self.app.access()?;
 
         self.cache_storage = None;
@@ -102,6 +104,28 @@ impl Host {
         let host = app.storage.get_host(self.id).await?;
 
         Ok(host.owner)
+    }
+
+    pub async fn undetailed_host_cached(
+        &self,
+        user: &mut AuthenticatedUser,
+    ) -> Result<UndetailedHost, AppError> {
+        self.can_use(user).await?;
+
+        let app = self.app.access()?;
+
+        let host = self.storage_host(&app).await?;
+
+        Ok(UndetailedHost {
+            host_id: host.id.0,
+            name: host.cache.name,
+            paired: if host.pair_info.is_some() {
+                PairStatus::Paired
+            } else {
+                PairStatus::NotPaired
+            },
+            server_state: None,
+        })
     }
 
     async fn use_client<R>(
