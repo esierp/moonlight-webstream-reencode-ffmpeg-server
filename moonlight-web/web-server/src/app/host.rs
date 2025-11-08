@@ -457,7 +457,7 @@ impl Host {
                         client_info,
                         &auth.private_key,
                         &auth.certificate,
-                        "roth",
+                        &app.config.moonlight.pair_device_name,
                         info.app_version,
                         pin,
                     )
