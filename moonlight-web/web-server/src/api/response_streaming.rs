@@ -65,7 +65,6 @@ where
 
         let initial = &mut this.initial;
 
-        // TODO: new lines?
         if let Some(initial) = initial.take() {
             let mut result = serde_json::to_string(&initial);
             if let Ok(text) = result.as_mut() {

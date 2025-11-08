@@ -114,7 +114,6 @@ async fn login(
 
     let url_path_prefix = &app.config().web_server.url_path_prefix;
 
-    // TODO: expiration of cookie
     Ok(HttpResponse::Ok()
         .cookie(
             Cookie::build(COOKIE_SESSION_TOKEN_NAME, session_str)

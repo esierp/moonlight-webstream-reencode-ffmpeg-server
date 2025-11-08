@@ -4,6 +4,7 @@ use actix_web::{
     get, post, put, services,
     web::{self, Bytes, Data, Json, Query},
 };
+use futures::future::try_join_all;
 use log::warn;
 use moonlight_common::PairPin;
 use tokio::spawn;
@@ -64,7 +65,6 @@ async fn get_user(
     }
 }
 
-// TODO: use response streaming to have longer timeouts on each individual host with json new line format
 #[get("/hosts")]
 async fn list_hosts(
     mut user: AuthenticatedUser,
@@ -74,40 +74,38 @@ async fn list_hosts(
 
     let hosts = user.hosts().await?;
 
-    let mut undetailed_hosts = Vec::with_capacity(hosts.len());
-    // TODO: do this parallel?
-    for mut host in hosts {
-        // First query db
-        let undetailed_cache = match host.undetailed_host_cached(&mut user).await {
-            Ok(value) => value,
-            Err(err) => {
-                // TODO: try to push the host based on cache and show error?
-                warn!("[Api] Failed to get undetailed data of host {host:?}: {err:?}");
-                continue;
-            }
-        };
-
-        undetailed_hosts.push(undetailed_cache);
-
-        // Then send http request now
+    // Try join all because storage should always work, the actual host info will be send using response streaming
+    let undetailed_hosts = try_join_all(hosts.into_iter().map(move |mut host| {
         let mut user = user.clone();
         let stream_sender = stream_sender.clone();
 
-        spawn(async move {
-            let undetailed = match host.undetailed_host(&mut user).await {
-                Ok(value) => value,
-                Err(err) => {
-                    warn!("Failed to get undetailed host of {host:?}: {err:?}");
-                    // TODO: what to do now?
-                    return;
-                }
-            };
+        async move {
+            // First query db
+            let undetailed_cache = host.undetailed_host_cached(&mut user).await;
 
-            if let Err(err) = stream_sender.send(undetailed).await {
-                warn!("Failed to send back undetailed host data using response streaming: {err:?}");
-            }
-        });
-    }
+            // Then send http request now
+            let mut user = user.clone();
+
+            spawn(async move {
+                let undetailed = match host.undetailed_host(&mut user).await {
+                    Ok(value) => value,
+                    Err(err) => {
+                        warn!("Failed to get undetailed host of {host:?}: {err:?}");
+                        return;
+                    }
+                };
+
+                if let Err(err) = stream_sender.send(undetailed).await {
+                    warn!(
+                        "Failed to send back undetailed host data using response streaming: {err:?}"
+                    );
+                }
+            });
+
+            undetailed_cache
+        }
+    }))
+    .await?;
 
     stream_response.set_initial(GetHostsResponse {
         hosts: undetailed_hosts,
