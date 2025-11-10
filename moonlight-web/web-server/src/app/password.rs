@@ -12,6 +12,10 @@ pub struct StoragePassword {
 
 impl StoragePassword {
     fn hash(salt: &[u8; 16], password: &str, out: &mut [u8; 32]) -> Result<(), AppError> {
+        if password.is_empty() {
+            return Err(AppError::PasswordEmpty);
+        }
+
         pkcs5::pbkdf2_hmac(
             password.as_bytes(),
             salt,

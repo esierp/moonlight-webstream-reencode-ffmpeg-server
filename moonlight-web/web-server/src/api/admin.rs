@@ -21,10 +21,6 @@ pub async fn add_user(
     admin: Admin,
     Json(request): Json<PostUserRequest>,
 ) -> Result<Json<DetailedUser>, AppError> {
-    if request.password.is_empty() {
-        return Err(AppError::BadRequest);
-    }
-
     let mut user = app
         .add_user(
             &admin,
@@ -48,12 +44,6 @@ pub async fn patch_user(
     Json(request): Json<PatchUserRequest>,
 ) -> Result<HttpResponse, AppError> {
     let target_user_id = UserId(request.id);
-
-    if let Some(password) = request.password.as_ref()
-        && password.is_empty()
-    {
-        return Err(AppError::BadRequest);
-    }
 
     match Admin::try_from(user).await? {
         Ok(admin) => {

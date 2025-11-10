@@ -397,7 +397,6 @@ impl Storage for JsonStorage {
             }
         };
 
-        // TODO: statistically impossible, but session duplicates?
         let mut sessions = self.sessions.write().await;
 
         sessions.insert(

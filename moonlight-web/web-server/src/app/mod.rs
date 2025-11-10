@@ -59,6 +59,10 @@ pub enum AppError {
     AuthorizationNotBearer,
     #[error("the authorization header is not a bearer")]
     BearerMalformed,
+    #[error("the password is empty")]
+    PasswordEmpty,
+    #[error("the password is empty")]
+    NameEmpty,
     #[error("the authorization header is not a bearer")]
     BadRequest,
     // --
@@ -94,6 +98,8 @@ impl ResponseError for AppError {
             Self::Hex(_) => StatusCode::BAD_REQUEST,
             Self::AuthorizationNotBearer => StatusCode::BAD_REQUEST,
             Self::BearerMalformed => StatusCode::BAD_REQUEST,
+            Self::PasswordEmpty => StatusCode::BAD_REQUEST,
+            Self::NameEmpty => StatusCode::BAD_REQUEST,
             Self::BadRequest => StatusCode::BAD_REQUEST,
             Self::MoonlightApi(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -160,7 +166,10 @@ impl App {
         &self,
         user: StorageUserAdd,
     ) -> Result<AuthenticatedUser, AppError> {
-        // TODO: prevent empty name / password
+        if user.name.is_empty() {
+            return Err(AppError::NameEmpty);
+        }
+
         let user = self.inner.storage.add_user(user).await?;
 
         Ok(AuthenticatedUser {
