@@ -27,6 +27,8 @@ export type InputInit = {
     step?: string
     accept?: string
     inputMode?: string
+    hasEnableCheckbox?: boolean
+    placeholer?: string
     formRequired?: boolean
 }
 
@@ -35,6 +37,7 @@ export type InputChangeListener = (event: ComponentEvent<InputComponent>) => voi
 export class InputComponent extends ElementWithLabel {
 
     private fileLabel: HTMLDivElement | null = null
+    private inputEnabled: HTMLInputElement | null = null
     private input: HTMLInputElement = document.createElement("input")
 
     constructor(internalName: string, type: string, displayName?: string, init?: InputInit) {
@@ -65,6 +68,9 @@ export class InputComponent extends ElementWithLabel {
         if (init && init.formRequired != null) {
             this.input.required = init.formRequired
         }
+        if (init && init.placeholer != null) {
+            this.input.placeholder = init.placeholer
+        }
 
         if (type == "file") {
             this.fileLabel = document.createElement("div")
@@ -75,6 +81,22 @@ export class InputComponent extends ElementWithLabel {
             this.label.classList.add("file-button")
 
             this.div.insertBefore(this.fileLabel, this.label)
+        }
+
+        if (init?.hasEnableCheckbox) {
+            this.inputEnabled = document.createElement("input")
+            this.inputEnabled.type = "checkbox"
+            this.inputEnabled.defaultChecked = false
+
+            this.inputEnabled.addEventListener("change", () => {
+                this.setEnabled(
+                    this.inputEnabled?.checked ?? (() => { throw "inputEnabled is null" })()
+                )
+
+                this.div.dispatchEvent(new ComponentEvent("ml-change", this))
+            })
+
+            this.div.appendChild(this.inputEnabled)
         }
 
         this.div.appendChild(this.input)
@@ -101,7 +123,14 @@ export class InputComponent extends ElementWithLabel {
     }
 
     setEnabled(enabled: boolean) {
+        if (this.inputEnabled) {
+            this.inputEnabled.checked = enabled
+        }
+
         this.input.disabled = !enabled
+    }
+    isEnabled(): boolean {
+        return !this.input.disabled
     }
 
     addChangeListener(listener: InputChangeListener, options?: AddEventListenerOptions) {

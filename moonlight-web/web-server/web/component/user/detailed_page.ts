@@ -9,12 +9,13 @@ export class DetailedUserPage implements Component {
 
     private api: Api
 
-    private root = document.createElement("div")
+    private formRoot = document.createElement("form")
 
     private id
 
     private idElement: InputComponent
     private name: InputComponent
+    private password: InputComponent
     private role: SelectComponent
 
     private applyButton = document.createElement("button")
@@ -24,38 +25,55 @@ export class DetailedUserPage implements Component {
         this.api = api
         this.id = user.id
 
-        this.root.classList.add("user-info")
+        this.formRoot.classList.add("user-info")
 
         this.idElement = new InputComponent("userId", "number", "User Id", {
             defaultValue: `${user.id}`
         })
         this.idElement.setEnabled(false)
-        this.idElement.mount(this.root)
+        this.idElement.mount(this.formRoot)
 
         this.name = new InputComponent("userName", "text", "User Name", {
             defaultValue: user.name,
         })
         this.name.setEnabled(false)
-        this.name.mount(this.root)
+        this.name.mount(this.formRoot)
+
+        this.password = new InputComponent("userPassword", "text", "Password", {
+            placeholer: "New Password",
+            formRequired: true,
+            hasEnableCheckbox: true
+        })
+        this.password.setEnabled(false)
+        this.password.mount(this.formRoot)
 
         this.role = createSelectRoleInput(user.role)
-        this.role.mount(this.root)
+        this.role.mount(this.formRoot)
 
-        this.applyButton.addEventListener("click", this.apply.bind(this))
         this.applyButton.innerText = "Apply"
-        this.root.appendChild(this.applyButton)
+        this.applyButton.type = "submit"
+        this.formRoot.appendChild(this.applyButton)
 
         this.deleteButton.addEventListener("click", this.delete.bind(this))
         this.deleteButton.classList.add("user-info-delete")
         this.deleteButton.innerText = "Delete"
-        this.root.appendChild(this.deleteButton)
+        this.formRoot.appendChild(this.deleteButton)
+
+        this.formRoot.addEventListener("submit", this.apply.bind(this))
     }
 
-    private async apply() {
+    private async apply(event: SubmitEvent) {
+        event.preventDefault()
+
+        let password = null
+        if (this.password.isEnabled()) {
+            password = this.password.getValue()
+        }
+
         const request: PatchUserRequest = {
             id: this.id,
             role: this.role.getValue() as UserRole,
-            password: null, // TODO: change password
+            password,
         };
 
         await apiPatchUser(this.api, request)
@@ -64,14 +82,14 @@ export class DetailedUserPage implements Component {
     private async delete() {
         await tryDeleteUser(this.api, this.id)
 
-        this.root.dispatchEvent(new ComponentEvent("ml-userdeleted", this))
+        this.formRoot.dispatchEvent(new ComponentEvent("ml-userdeleted", this))
     }
 
     addDeletedListener(listener: UserEventListener, options?: EventListenerOptions) {
-        this.root.addEventListener("ml-userdeleted", listener as any, options)
+        this.formRoot.addEventListener("ml-userdeleted", listener as any, options)
     }
     removeDeletedListener(listener: UserEventListener) {
-        this.root.removeEventListener("ml-userdeleted", listener as any)
+        this.formRoot.removeEventListener("ml-userdeleted", listener as any)
     }
 
     getUserId(): number {
@@ -79,9 +97,9 @@ export class DetailedUserPage implements Component {
     }
 
     mount(parent: HTMLElement): void {
-        parent.appendChild(this.root)
+        parent.appendChild(this.formRoot)
     }
     unmount(parent: HTMLElement): void {
-        parent.removeChild(this.root)
+        parent.removeChild(this.formRoot)
     }
 }
