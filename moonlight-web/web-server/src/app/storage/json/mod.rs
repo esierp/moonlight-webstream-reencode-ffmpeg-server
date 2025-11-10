@@ -385,7 +385,17 @@ impl Storage for JsonStorage {
         user_id: UserId,
         expiration: Duration,
     ) -> Result<SessionToken, AppError> {
-        let token = SessionToken::new()?;
+        let mut token;
+        {
+            let sessions = self.sessions.read().await;
+
+            loop {
+                token = SessionToken::new()?;
+                if !sessions.contains_key(&token) {
+                    break;
+                }
+            }
+        };
 
         // TODO: statistically impossible, but session duplicates?
         let mut sessions = self.sessions.write().await;
