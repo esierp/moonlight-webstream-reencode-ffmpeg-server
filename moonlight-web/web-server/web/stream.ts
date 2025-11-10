@@ -184,8 +184,10 @@ class ViewerApp implements Component {
     }
 
     private focusInput() {
-        const inputElement = document.getElementById("input") as HTMLDivElement
-        inputElement.focus()
+        if (this.stream?.getInput().getCurrentPredictedTouchAction() != "screenKeyboard" && !this.sidebar.getScreenKeyboard().isVisible()) {
+            const inputElement = document.getElementById("input") as HTMLDivElement
+            inputElement.focus()
+        }
     }
 
     onUserInteraction() {

@@ -54,6 +54,7 @@ export function defaultStreamInputConfig(): StreamInputConfig {
     }
 }
 
+export type PredictedTouchAction = "default" | "scroll" | "screenKeyboard"
 export type ScreenKeyboardSetVisibleEvent = CustomEvent<{ visible: boolean }>
 
 export class StreamInput {
@@ -329,7 +330,7 @@ export class StreamInput {
         mouseClicked: boolean
         mouseMoved: boolean
     }> = new Map()
-    private touchMouseAction: "default" | "scroll" | "screenKeyboard" = "default"
+    private touchMouseAction: PredictedTouchAction = "default"
     private primaryTouch: number | null = null
 
     private onTouchMessage(event: MessageEvent) {
@@ -475,7 +476,6 @@ export class StreamInput {
                         this.sendMouseWheel(-movementX * TOUCH_SCROLL_MULTIPLIER, movementY * TOUCH_SCROLL_MULTIPLIER)
                     }
                 } else if (this.touchMouseAction == "screenKeyboard") {
-                    // TODO: fix keyboard touch gesture
                     const distanceY = touch.clientY - oldTouch.originY
 
                     if (distanceY < -TOUCHES_AS_KEYBOARD_DISTANCE) {
@@ -583,6 +583,10 @@ export class StreamInput {
 
     isTouchSupported(): boolean | null {
         return this.touchSupported
+    }
+
+    getCurrentPredictedTouchAction(): PredictedTouchAction {
+        return this.touchMouseAction
     }
 
     // -- Controller
