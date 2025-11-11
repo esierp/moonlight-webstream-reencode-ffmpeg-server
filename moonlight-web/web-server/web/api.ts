@@ -322,21 +322,13 @@ export async function apiGetHost(api: Api, query: GetHostQuery): Promise<Detaile
 
     return (response as GetHostResponse).host
 }
-export async function apiPutHost(api: Api, data: PutHostRequest): Promise<DetailedHost> {
-    // TODO: make this post
-    const response = await fetchApi(api, "/host", "put", { json: data })
+export async function apiPostHost(api: Api, data: PutHostRequest): Promise<DetailedHost> {
+    const response = await fetchApi(api, "/host", "post", { json: data })
 
     return (response as PutHostResponse).host
 }
-export async function apiDeleteHost(api: Api, query: DeleteHostQuery): Promise<boolean> {
-    // TODO: don't catch
-    try {
-        await fetchApi(api, "/host", "delete", { query, response: "ignore" })
-    } catch (e) {
-        return false
-    }
-
-    return true
+export async function apiDeleteHost(api: Api, query: DeleteHostQuery): Promise<void> {
+    await fetchApi(api, "/host", "delete", { query, response: "ignore" })
 }
 
 export async function apiPostPair(api: Api, request: PostPairRequest): Promise<StreamedJsonResponse<PostPairResponse1, PostPairResponse2>> {

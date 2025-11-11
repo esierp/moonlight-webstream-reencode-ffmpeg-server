@@ -1,7 +1,7 @@
 use actix_web::{
     HttpResponse, delete,
     dev::HttpServiceFactory,
-    get, post, put, services,
+    get, post, services,
     web::{self, Bytes, Data, Json, Query},
 };
 use futures::future::try_join_all;
@@ -128,8 +128,8 @@ async fn get_host(
     Ok(Json(GetHostResponse { host: detailed }))
 }
 
-#[put("/host")]
-async fn put_host(
+#[post("/host")]
+async fn post_host(
     app: Data<App>,
     mut user: AuthenticatedUser,
     Json(query): Json<PutHostRequest>,
@@ -268,7 +268,7 @@ pub fn api_service() -> impl HttpServiceFactory {
             get_user,
             list_hosts,
             get_host,
-            put_host,
+            post_host,
             wake_host,
             delete_host,
             pair_host,

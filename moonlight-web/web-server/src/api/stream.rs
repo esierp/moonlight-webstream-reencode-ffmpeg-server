@@ -317,6 +317,5 @@ pub async fn cancel_host(
 
     host.cancel_app(&mut user).await?;
 
-    // TODO: this response is a crime to all coders, don't have a success field!
     Ok(Json(PostCancelResponse { success: true }))
 }

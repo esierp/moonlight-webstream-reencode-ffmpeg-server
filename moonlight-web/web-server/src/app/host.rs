@@ -603,7 +603,7 @@ impl Host {
         Ok(app_image)
     }
 
-    pub async fn cancel_app(&mut self, user: &mut AuthenticatedUser) -> Result<(), AppError> {
+    pub async fn cancel_app(&mut self, user: &mut AuthenticatedUser) -> Result<bool, AppError> {
         self.can_use(user).await?;
 
         let app = self.app.access()?;
@@ -622,7 +622,6 @@ impl Host {
                     return Err(AppError::Forbidden);
                 }
 
-                // TODO: use success
                 let success = host_cancel(
                     client,
                     &Self::build_hostport(host, info.https_port),
@@ -630,7 +629,7 @@ impl Host {
                 )
                 .await?;
 
-                Ok(())
+                Ok(success)
             },
         )
         .await?

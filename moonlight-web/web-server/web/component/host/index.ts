@@ -166,13 +166,10 @@ export class Host implements Component {
     }
 
     private async remove() {
-        const success = await apiDeleteHost(this.api, {
+        await apiDeleteHost(this.api, {
             host_id: this.getHostId()
         })
 
-        if (!success) {
-            showErrorPopup(`something went wrong whilst removing the host ${this.getHostId()}`)
-        }
         this.divElement.dispatchEvent(new ComponentEvent("ml-hostremove", this))
     }
     private async wakeUp() {

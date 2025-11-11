@@ -1,4 +1,4 @@
-import { Api, getApi, apiPutHost, FetchError, apiLogout, apiGetUser } from "./api.js";
+import { Api, getApi, apiPostHost, FetchError, apiLogout, apiGetUser } from "./api.js";
 import { AddHostModal } from "./component/host/add_modal.js";
 import { HostList } from "./component/host/list.js";
 import { Component, ComponentEvent } from "./component/index.js";
@@ -147,7 +147,7 @@ class MainApp implements Component {
         if (host) {
             let newHost
             try {
-                newHost = await apiPutHost(this.api, host)
+                newHost = await apiPostHost(this.api, host)
             } catch (e) {
                 if (e instanceof FetchError) {
                     const response = e.getResponse()
