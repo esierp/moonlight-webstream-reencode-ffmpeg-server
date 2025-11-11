@@ -11,7 +11,7 @@ use actix_web::{
     middleware::{self, Logger},
     web::Data,
 };
-use log::{Level, LevelFilter, info};
+use log::{Level, LevelFilter, error, info};
 use serde::{Serialize, de::DeserializeOwned};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
@@ -44,7 +44,7 @@ async fn main() {
     .expect("failed to init logger");
 
     if let Err(err) = main2().await {
-        info!("Error: {err:?}");
+        error!("{err:?}");
     }
 
     exit().await.expect("exit failed")

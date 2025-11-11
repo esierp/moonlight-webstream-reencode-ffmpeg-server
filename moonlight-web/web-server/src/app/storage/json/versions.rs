@@ -87,7 +87,7 @@ pub fn migrate_v1_to_v2(old: V1) -> V2 {
 
 // -- V2
 
-use crate::app::storage::json::serde_helpers::de_int_key;
+use crate::app::storage::json::serde_helpers::{de_int_key, hex_array};
 
 #[derive(Serialize, Deserialize)]
 pub struct V2 {
@@ -105,8 +105,9 @@ pub struct V2User {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V2UserPassword {
-    // TODO: maybe make them serialize to base64
+    #[serde(with = "hex_array")]
     pub salt: [u8; 16],
+    #[serde(with = "hex_array")]
     pub hash: [u8; 32],
 }
 
