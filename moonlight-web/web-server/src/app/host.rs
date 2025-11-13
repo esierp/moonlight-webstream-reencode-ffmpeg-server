@@ -450,7 +450,7 @@ impl Host {
 
                     let https_address = Self::build_hostport(host, info.https_port);
 
-                    let PairSuccess { server_certificate, mut client } = host_pair(
+                    let PairSuccess { server_certificate, mut client } =host_pair(
                         client,
                         &Self::build_hostport(host, port),
                         &https_address,
@@ -461,9 +461,8 @@ impl Host {
                         info.app_version,
                         pin,
                     )
-                    .await
-                    // TODO: handle pair error correctly!
-                    .unwrap();
+                    .await?;
+
 
                     // Store pair info
                     let (name, mac) = match host_info(

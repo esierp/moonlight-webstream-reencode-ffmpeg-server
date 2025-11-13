@@ -8,8 +8,11 @@ use std::{
 use actix_web::{HttpResponse, ResponseError, http::StatusCode, web::Bytes};
 use common::config::Config;
 use hex::FromHexError;
-use moonlight_common::network::{
-    ApiError, backend::hyper_openssl::HyperOpenSSLClient, request_client::RequestClient,
+use moonlight_common::{
+    network::{
+        ApiError, backend::hyper_openssl::HyperOpenSSLClient, request_client::RequestClient,
+    },
+    pair::PairError,
 };
 use openssl::error::ErrorStack;
 use thiserror::Error;
@@ -74,6 +77,8 @@ pub enum AppError {
     Io(#[from] io::Error),
     #[error("moonlight api error: {0}")]
     MoonlightApi(#[from] ApiError<<MoonlightClient as RequestClient>::Error>),
+    #[error("pairing error: {0}")]
+    Pairing(#[from] PairError<<MoonlightClient as RequestClient>::Error>),
 }
 
 impl ResponseError for AppError {
@@ -103,6 +108,7 @@ impl ResponseError for AppError {
             Self::BadRequest => StatusCode::BAD_REQUEST,
             Self::MoonlightApi(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Pairing(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

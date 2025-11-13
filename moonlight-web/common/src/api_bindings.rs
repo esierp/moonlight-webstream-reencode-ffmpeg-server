@@ -12,8 +12,6 @@ use crate::ts_consts;
 
 const EXPORT_PATH: &str = "../../web-server/web/api_bindings.ts";
 
-// TODO: remove force refresh from some requests
-
 #[derive(Serialize, Deserialize, Debug, TS, Clone)]
 #[ts(export, export_to = EXPORT_PATH)]
 pub struct ConfigJs {
