@@ -111,7 +111,7 @@ async fn main() {
         stream_settings,
         host_address,
         host_http_port,
-        host_unique_id,
+        client_unique_id,
         client_private_key,
         client_certificate,
         server_certificate,
@@ -123,7 +123,7 @@ async fn main() {
                 stream_settings,
                 host_address,
                 host_http_port,
-                host_unique_id,
+                client_unique_id,
                 client_private_key,
                 client_certificate,
                 server_certificate,
@@ -142,7 +142,7 @@ async fn main() {
                     stream_settings,
                     host_address,
                     host_http_port,
-                    host_unique_id,
+                    client_unique_id,
                     client_private_key,
                     client_certificate,
                     server_certificate,
@@ -163,7 +163,7 @@ async fn main() {
         .await;
 
     // -- Create the host and pair it
-    let mut host = MoonlightHost::new(host_address, host_http_port, host_unique_id)
+    let mut host = MoonlightHost::new(host_address, host_http_port, client_unique_id)
         .expect("failed to create host");
 
     host.set_pairing_info(

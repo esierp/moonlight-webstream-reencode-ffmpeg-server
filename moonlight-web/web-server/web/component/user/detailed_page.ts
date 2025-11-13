@@ -17,6 +17,7 @@ export class DetailedUserPage implements Component {
     private name: InputComponent
     private password: InputComponent
     private role: SelectComponent
+    private clientUniqueId: InputComponent
 
     private applyButton = document.createElement("button")
     private deleteButton = document.createElement("button")
@@ -50,6 +51,11 @@ export class DetailedUserPage implements Component {
         this.role = createSelectRoleInput(user.role)
         this.role.mount(this.formRoot)
 
+        this.clientUniqueId = new InputComponent("userClientUniqueId", "text", "Moonlight Client Id", {
+            defaultValue: user.client_unique_id,
+        })
+        this.clientUniqueId.mount(this.formRoot)
+
         this.applyButton.innerText = "Apply"
         this.applyButton.type = "submit"
         this.formRoot.appendChild(this.applyButton)
@@ -74,6 +80,7 @@ export class DetailedUserPage implements Component {
             id: this.id,
             role: this.role.getValue() as UserRole,
             password,
+            client_unique_id: this.clientUniqueId.getValue()
         };
 
         await apiPatchUser(this.api, request)

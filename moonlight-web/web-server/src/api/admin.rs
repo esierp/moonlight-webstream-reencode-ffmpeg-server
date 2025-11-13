@@ -25,9 +25,10 @@ pub async fn add_user(
         .add_user(
             &admin,
             StorageUserAdd {
-                name: request.name,
+                name: request.name.clone(),
                 password: StoragePassword::new(&request.password)?,
                 role: request.role.into(),
+                client_unique_id: request.client_unique_id,
             },
         )
         .await?;
@@ -61,6 +62,7 @@ pub async fn patch_user(
                     StorageUserModify {
                         password: new_password,
                         role: request.role.map(Role::from),
+                        client_unique_id: request.client_unique_id,
                     },
                 )
                 .await?;
@@ -71,12 +73,13 @@ pub async fn patch_user(
             }
 
             // Only allow changing the password
-            if let PatchUserRequest {
+            let PatchUserRequest {
                 id: _,
                 password: _,
-                role: Some(_),
-            } = request
-            {
+                role,
+                client_unique_id,
+            } = &request;
+            if role.is_some() || client_unique_id.is_some() {
                 return Err(AppError::Forbidden);
             }
 

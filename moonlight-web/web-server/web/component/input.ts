@@ -104,6 +104,11 @@ export class InputComponent extends ElementWithLabel {
         this.input.addEventListener("change", () => {
             this.div.dispatchEvent(new ComponentEvent("ml-change", this))
         })
+
+        if (init?.hasEnableCheckbox) {
+            // The main logic is further up
+            this.setEnabled(false)
+        }
     }
 
     reset() {
@@ -138,6 +143,10 @@ export class InputComponent extends ElementWithLabel {
     }
     removeChangeListener(listener: InputChangeListener) {
         this.div.removeEventListener("ml-change", listener as any)
+    }
+
+    setPlaceholder(newPlaceholder: string) {
+        this.input.placeholder = newPlaceholder
     }
 }
 

@@ -41,17 +41,20 @@ pub struct StorageUser {
     // TODO: password might be null if we initialized it via the forwarded headers?
     pub password: StoragePassword,
     pub role: Role,
+    pub client_unique_id: String,
 }
 #[derive(Clone)]
 pub struct StorageUserAdd {
     pub role: Role,
     pub name: String,
     pub password: StoragePassword,
+    pub client_unique_id: String,
 }
 #[derive(Default, Clone)]
 pub struct StorageUserModify {
     pub role: Option<Role>,
     pub password: Option<StoragePassword>,
+    pub client_unique_id: Option<String>,
 }
 
 #[derive(Clone)]

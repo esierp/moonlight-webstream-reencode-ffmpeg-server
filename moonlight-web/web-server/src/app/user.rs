@@ -86,11 +86,6 @@ impl User {
 
         Ok(storage.name)
     }
-    pub async fn role(&mut self) -> Result<Role, AppError> {
-        let storage = self.storage_user().await?;
-
-        Ok(storage.role)
-    }
 
     pub async fn detailed_user(
         &mut self,
@@ -103,10 +98,13 @@ impl User {
         }
     }
     pub async fn detailed_user_no_auth(&mut self) -> Result<DetailedUser, AppError> {
+        let storage = self.storage_user().await?;
+
         Ok(DetailedUser {
             id: self.id.0,
             name: self.name().await?,
-            role: self.role().await?.into(),
+            role: storage.role.into(),
+            client_unique_id: storage.client_unique_id,
         })
     }
 
@@ -184,6 +182,12 @@ impl AuthenticatedUser {
         self.detailed_user_no_auth().await
     }
 
+    pub async fn role(&mut self) -> Result<Role, AppError> {
+        let storage = self.storage_user().await?;
+
+        Ok(storage.role)
+    }
+
     pub async fn set_password(&mut self, password: StoragePassword) -> Result<(), AppError> {
         let app = self.app.access()?;
 
@@ -216,8 +220,7 @@ impl AuthenticatedUser {
     pub async fn host_unique_id(&mut self) -> Result<String, AppError> {
         let user = self.storage_user().await?;
 
-        // TODO: have an override for user
-        Ok(user.name)
+        Ok(user.client_unique_id.clone())
     }
 
     pub async fn hosts(&mut self) -> Result<Vec<Host>, AppError> {

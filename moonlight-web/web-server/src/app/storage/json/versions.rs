@@ -102,6 +102,7 @@ pub struct V2User {
     pub role: Role,
     pub name: String,
     pub password: V2UserPassword,
+    pub client_unique_id: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct V2UserPassword {

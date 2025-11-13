@@ -225,6 +225,7 @@ pub struct DetailedUser {
     pub id: u32,
     pub name: String,
     pub role: UserRole,
+    pub client_unique_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]
@@ -233,6 +234,7 @@ pub struct PostUserRequest {
     pub name: String,
     pub password: String,
     pub role: UserRole,
+    pub client_unique_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]
@@ -242,6 +244,7 @@ pub struct PatchUserRequest {
     pub id: u32,
     pub password: Option<String>,
     pub role: Option<UserRole>,
+    pub client_unique_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]

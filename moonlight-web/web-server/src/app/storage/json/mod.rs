@@ -225,6 +225,7 @@ fn user_from_json(user_id: UserId, user: &V2User) -> StorageUser {
             hash: user.password.hash,
         },
         role: user.role,
+        client_unique_id: user.client_unique_id.clone(),
     }
 }
 
@@ -256,6 +257,7 @@ impl Storage for JsonStorage {
                 salt: user.password.salt,
                 hash: user.password.hash,
             },
+            client_unique_id: user.client_unique_id,
         };
 
         {
@@ -294,6 +296,7 @@ impl Storage for JsonStorage {
                 hash: user.password.hash,
             },
             role: user.role,
+            client_unique_id: user.client_unique_id,
         })
     }
     async fn modify_user(
@@ -314,6 +317,9 @@ impl Storage for JsonStorage {
         }
         if let Some(role) = modify.role {
             user.role = role;
+        }
+        if let Some(client_unique_id) = modify.client_unique_id {
+            user.client_unique_id = client_unique_id;
         }
 
         drop(user);

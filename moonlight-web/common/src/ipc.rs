@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use log::warn;
+use log::{debug, warn};
 use pem::Pem;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
@@ -31,7 +31,7 @@ pub enum ServerIpcMessage {
         stream_settings: StreamSettings,
         host_address: String,
         host_http_port: u16,
-        host_unique_id: Option<String>,
+        client_unique_id: Option<String>,
         client_private_key: Pem,
         client_certificate: Pem,
         server_certificate: Pem,
@@ -130,6 +130,9 @@ where
                 continue;
             }
         };
+
+        debug!("[Ipc] sending {json}");
+
         json.push('\n');
 
         if let Err(err) = write.write_all(json.as_bytes()).await {
@@ -194,6 +197,8 @@ where
                 return None;
             }
         };
+
+        debug!("[Ipc] received {line}");
 
         match serde_json::from_str::<Message>(&line) {
             Ok(value) => Some(value),

@@ -32,6 +32,8 @@ pub async fn start_host(
 ) -> Result<HttpResponse, Error> {
     let (response, mut session, mut stream) = actix_ws::handle(&request, payload)?;
 
+    let client_unique_id = user.host_unique_id().await?;
+
     let web_app = web_app.clone();
     actix_rt::spawn(async move {
         // -- Init and Configure
@@ -260,7 +262,7 @@ pub async fn start_host(
                 stream_settings,
                 host_address: address,
                 host_http_port: http_port,
-                host_unique_id: None,
+                client_unique_id: Some(client_unique_id),
                 client_private_key: pair_info.client_private_key,
                 client_certificate: pair_info.client_certificate,
                 server_certificate: pair_info.server_certificate,

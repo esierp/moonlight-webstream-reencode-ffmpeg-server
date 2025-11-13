@@ -10,6 +10,7 @@ export class AddUserModal extends FormModal<PostUserRequest> {
     private name: InputComponent
     private defaultPassword: InputComponent
     private role: SelectComponent
+    private clientUniqueId: InputComponent
 
     constructor() {
         super()
@@ -25,6 +26,16 @@ export class AddUserModal extends FormModal<PostUserRequest> {
         })
 
         this.role = createSelectRoleInput("User")
+
+        this.clientUniqueId = new InputComponent("userClientUniqueId", "text", "Moonlight Client Id", {
+            formRequired: true,
+            hasEnableCheckbox: true
+        })
+        this.name.addChangeListener(this.updateClientUniqueId.bind(this))
+    }
+
+    private updateClientUniqueId() {
+        this.clientUniqueId.setPlaceholder(this.name.getValue())
     }
 
     mountForm(form: HTMLFormElement): void {
@@ -32,6 +43,7 @@ export class AddUserModal extends FormModal<PostUserRequest> {
         this.name.mount(form)
         this.defaultPassword.mount(form)
         this.role.mount(form)
+        this.clientUniqueId.mount(form)
     }
 
     reset(): void {
@@ -44,10 +56,16 @@ export class AddUserModal extends FormModal<PostUserRequest> {
         const password = this.defaultPassword.getValue()
         const role = this.role.getValue() as UserRole
 
+        let clientUniqueId = name
+        if (this.clientUniqueId.isEnabled()) {
+            clientUniqueId = this.clientUniqueId.getValue()
+        }
+
         return {
             name,
             password,
             role,
+            client_unique_id: clientUniqueId,
         }
     }
 }
