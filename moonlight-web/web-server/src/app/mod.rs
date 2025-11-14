@@ -89,7 +89,7 @@ impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         match self {
             Self::SessionTokenNotFound => {
-                let mut response = HttpResponse::TemporaryRedirect().finish();
+                let mut response = HttpResponse::Conflict().finish();
 
                 if let Err(err) =
                     response.add_removal_cookie(&Cookie::named(COOKIE_SESSION_TOKEN_NAME))

@@ -21,7 +21,6 @@ pub fn web_config_js_service() -> impl HttpServiceFactory {
 #[get("/config.js")]
 async fn config_js(app: Data<App>) -> HttpResponse {
     let config_json = match serde_json::to_string(&ConfigJs {
-        enable_user_password_authentication: true,
         path_prefix: app.config().web_server.url_path_prefix.clone(),
     }) {
         Ok(value) => value,

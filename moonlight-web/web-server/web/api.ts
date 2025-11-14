@@ -2,7 +2,7 @@ import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, Ge
 import { showErrorPopup } from "./component/error.js";
 import { showMessage, showModal } from "./component/modal/index.js";
 import { ApiUserPasswordPrompt } from "./component/modal/login.js";
-import { buildUrl, isUserPasswordAuthenticationEnabled } from "./config_.js";
+import { buildUrl } from "./config_.js";
 
 // IMPORTANT: this should be a bit bigger than the moonlight-common reqwest backend timeout if some hosts are offline!
 const API_TIMEOUT = 12000
@@ -107,7 +107,7 @@ function buildRequest(api: Api, endpoint: string, method: string, init?: ApiFetc
     const headers: any = {
     };
 
-    if (isUserPasswordAuthenticationEnabled() && api.bearer) {
+    if (api.bearer) {
         headers["Authorization"] = `Bearer ${api.bearer}`;
     }
 
@@ -277,8 +277,11 @@ export async function apiAuthenticate(api: Api): Promise<boolean> {
     } catch (e) {
         if (e instanceof FetchError) {
             const response = e.getResponse()
-            if (response && response.status == 401) {
+            if (response?.status == 401) {
                 return false
+            } else if (response?.status == 409) {
+                // 409 = Conflict, SessionTokenNotFound -> requires a new request
+                return await apiAuthenticate(api)
             } else {
                 throw e
             }
