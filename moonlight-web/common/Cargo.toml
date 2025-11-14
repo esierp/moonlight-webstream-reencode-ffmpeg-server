@@ -24,7 +24,7 @@ pem = { workspace = true, features = ["serde"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-log = { workspace = true }
+log = { workspace = true, features = ["serde"] }
 
 ts-rs = { workspace = true, features = ["uuid-impl"] }
 

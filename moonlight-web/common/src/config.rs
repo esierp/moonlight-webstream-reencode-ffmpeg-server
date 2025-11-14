@@ -3,6 +3,7 @@ use std::{
     time::Duration,
 };
 
+use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 
 use crate::api_bindings::RtcIceServer;
@@ -16,6 +17,7 @@ pub struct Config {
     pub moonlight: MoonlightConfig,
     #[serde(default = "default_streamer_path")]
     pub streamer_path: String,
+    pub log: LogConfig,
 }
 
 impl Default for Config {
@@ -26,6 +28,24 @@ impl Default for Config {
             web_server: Default::default(),
             moonlight: Default::default(),
             webrtc: Default::default(),
+            log: Default::default(),
+        }
+    }
+}
+
+// -- Log
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogConfig {
+    pub level_filter: LevelFilter,
+    pub file_path: Option<String>,
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            level_filter: LevelFilter::Info,
+            file_path: None,
         }
     }
 }

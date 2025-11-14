@@ -258,6 +258,7 @@ pub async fn start_host(
             .send(ServerIpcMessage::Init {
                 config: StreamerConfig {
                     webrtc: web_app.config().webrtc.clone(),
+                    log_level: web_app.config().log.level_filter,
                 },
                 stream_settings,
                 host_address: address,

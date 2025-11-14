@@ -7,7 +7,7 @@ use common::{
     ipc::{IpcReceiver, IpcSender, ServerIpcMessage, StreamerIpcMessage, create_process_ipc},
     serialize_json,
 };
-use log::{LevelFilter, debug, info, warn};
+use log::{debug, info, warn};
 use moonlight_common::{
     MoonlightError,
     high::{HostError, MoonlightHost},
@@ -74,19 +74,6 @@ mod video;
 
 #[tokio::main]
 async fn main() {
-    #[cfg(debug_assertions)]
-    let log_level = LevelFilter::Debug;
-    #[cfg(not(debug_assertions))]
-    let log_level = LevelFilter::Info;
-
-    TermLogger::init(
-        log_level,
-        simplelog::Config::default(),
-        TerminalMode::Stderr,
-        ColorChoice::Auto,
-    )
-    .expect("failed to init logger");
-
     let default_panic = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         default_panic(info);
@@ -152,6 +139,14 @@ async fn main() {
             _ => continue,
         }
     };
+
+    TermLogger::init(
+        config.log_level,
+        simplelog::Config::default(),
+        TerminalMode::Stderr,
+        ColorChoice::Auto,
+    )
+    .expect("failed to init logger");
 
     // Send stage
     ipc_sender

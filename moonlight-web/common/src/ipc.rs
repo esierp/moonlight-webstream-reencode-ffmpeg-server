@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use log::{debug, warn};
+use log::{LevelFilter, debug, warn};
 use pem::Pem;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
@@ -21,6 +21,7 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StreamerConfig {
     pub webrtc: WebRtcConfig,
+    pub log_level: LevelFilter,
 }
 
 #[allow(clippy::large_enum_variant)]

@@ -2,7 +2,7 @@ use common::config::Config;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::{io::ErrorKind, path::Path};
 use tokio::{
-    fs,
+    fs::{self, File},
     io::{AsyncBufReadExt, BufReader, stdin},
 };
 
@@ -11,9 +11,9 @@ use actix_web::{
     middleware::{self, Logger},
     web::Data,
 };
-use log::{Level, LevelFilter, error, info};
+use log::{Level, error, info};
 use serde::{Serialize, de::DeserializeOwned};
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, CombinedLogger, SharedLogger, TermLogger, TerminalMode, WriteLogger};
 
 use crate::{
     api::api_service,
@@ -27,25 +27,46 @@ mod web;
 
 #[actix_web::main]
 async fn main() {
-    // TODO: log config: set level, file, anonymize ips when enabled in file
+    // Load Config
+    let config = read_or_default::<Config>("./server/config.json").await;
+
+    // TODO: log config: anonymize ips when enabled in file
     // TODO: https://www.reddit.com/r/csharp/comments/166xgcl/comment/jynybpe/
 
     // TODO: human json: strip comments
 
-    #[cfg(debug_assertions)]
-    let log_level = LevelFilter::Debug;
-    #[cfg(not(debug_assertions))]
-    let log_level = LevelFilter::Info;
+    let log_config = simplelog::Config::default();
 
-    TermLogger::init(
-        log_level,
-        simplelog::Config::default(),
+    let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
+        config.log.level_filter,
+        log_config.clone(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    )
-    .expect("failed to init logger");
+    )];
 
-    if let Err(err) = main2().await {
+    if let Some(file_path) = &config.log.file_path {
+        if fs::try_exists(file_path)
+            .await
+            .expect("failed to check if log file exists")
+        {
+            // TODO: should we rename?
+        }
+
+        let file = File::create(file_path)
+            .await
+            .expect("failed to open log file");
+
+        loggers.push(WriteLogger::new(
+            config.log.level_filter,
+            log_config,
+            file.try_into_std()
+                .expect("failed to cast tokio file into std file"),
+        ));
+    }
+
+    CombinedLogger::init(loggers).expect("failed to init combined logger");
+
+    if let Err(err) = start(config).await {
         error!("{err:?}");
     }
 
@@ -53,6 +74,7 @@ async fn main() {
 }
 
 async fn exit() -> Result<(), anyhow::Error> {
+    // TODO: remove this?
     info!("Press Enter to close this window");
 
     let mut line = String::new();
@@ -63,10 +85,7 @@ async fn exit() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn main2() -> Result<(), anyhow::Error> {
-    // Load Config
-    let config = read_or_default::<Config>("./server/config.json").await;
-
+async fn start(config: Config) -> Result<(), anyhow::Error> {
     let app = App::new(config).await?;
     let app = Data::new(app);
 
