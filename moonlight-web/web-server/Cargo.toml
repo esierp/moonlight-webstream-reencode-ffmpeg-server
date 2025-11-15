@@ -27,8 +27,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 pem = { workspace = true }
 
-# TODO: do we need slab?
-slab = { workspace = true, features = ["serde"] }
 async-stream = { workspace = true }
 futures = { workspace = true }
 uuid.workspace = true

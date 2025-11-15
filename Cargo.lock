@@ -2995,9 +2995,6 @@ name = "slab"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04dc19736151f35336d325007ac991178d504a119863a2fcb3758cdb5e52c50d"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "smallvec"
@@ -3739,7 +3736,6 @@ dependencies = [
  "serde",
  "serde_json",
  "simplelog",
- "slab",
  "thiserror 2.0.16",
  "tokio",
  "uuid",

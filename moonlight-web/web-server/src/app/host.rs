@@ -567,6 +567,7 @@ impl Host {
     ) -> Result<Bytes, AppError> {
         self.can_use(user).await?;
 
+        // TODO: apollo doesn't like this for some reason
         let app = self.app.access()?;
 
         let info = self
