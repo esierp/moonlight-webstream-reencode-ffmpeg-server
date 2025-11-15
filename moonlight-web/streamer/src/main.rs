@@ -7,7 +7,7 @@ use common::{
     ipc::{IpcReceiver, IpcSender, ServerIpcMessage, StreamerIpcMessage, create_process_ipc},
     serialize_json,
 };
-use log::{debug, info, warn};
+use log::{LevelFilter, debug, info, warn};
 use moonlight_common::{
     MoonlightError,
     high::{HostError, MoonlightHost},
@@ -142,9 +142,12 @@ async fn main() {
 
     TermLogger::init(
         config.log_level,
-        simplelog::Config::default(),
+        simplelog::ConfigBuilder::new()
+            .add_filter_ignore_str("webrtc_sctp")
+            .set_time_level(LevelFilter::Off)
+            .build(),
         TerminalMode::Stderr,
-        ColorChoice::Auto,
+        ColorChoice::Never,
     )
     .expect("failed to init logger");
 

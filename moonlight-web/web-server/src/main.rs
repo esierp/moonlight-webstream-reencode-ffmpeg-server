@@ -35,11 +35,11 @@ async fn main() {
 
     // TODO: human json: strip comments
 
-    let log_config = simplelog::Config::default();
+    let mut log_config = simplelog::ConfigBuilder::default();
 
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
         config.log.level_filter,
-        log_config.clone(),
+        log_config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )];
@@ -58,7 +58,7 @@ async fn main() {
 
         loggers.push(WriteLogger::new(
             config.log.level_filter,
-            log_config,
+            log_config.build(),
             file.try_into_std()
                 .expect("failed to cast tokio file into std file"),
         ));
