@@ -1,6 +1,9 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use log::warn;
+use log::{debug, warn};
 use tokio::sync::{
     Mutex,
     mpsc::{Receiver, Sender, channel, error::TrySendError},
@@ -10,7 +13,10 @@ use webrtc::{
     rtcp::packet::Packet,
     rtp::{
         self,
-        extension::{HeaderExtension, playout_delay_extension::PlayoutDelayExtension},
+        extension::{
+            HeaderExtension, abs_send_time_extension::AbsSendTimeExtension,
+            playout_delay_extension::PlayoutDelayExtension,
+        },
     },
     track::track_local::{
         TrackLocal, track_local_static_rtp::TrackLocalStaticRTP,
@@ -91,7 +97,10 @@ where
             } else {
                 return match sender.try_send(sample) {
                     Ok(()) => Ok(true),
-                    Err(TrySendError::Full(_)) => Ok(false),
+                    Err(TrySendError::Full(_)) => {
+                        debug!("dropping sample on purpose because queue is full");
+                        Ok(false)
+                    }
                     Err(TrySendError::Closed(_)) => Err(()),
                 };
             }
@@ -106,12 +115,21 @@ where
     Track: TrackLike,
 {
     while let Some(sample) = receiver.recv().await {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock went backwards");
+        let now_secs = now.as_secs() as f64 + now.subsec_nanos() as f64 * 1e-9;
+        let abs_send_time: u64 = (now_secs * 262_144.0) as u64;
+
         if let Err(err) = track
             .write_with_extensions(
                 sample,
-                &[HeaderExtension::PlayoutDelay(PlayoutDelayExtension::new(
-                    0, 0,
-                ))],
+                &[
+                    HeaderExtension::PlayoutDelay(PlayoutDelayExtension::new(0, 0)),
+                    HeaderExtension::AbsSendTime(AbsSendTimeExtension {
+                        timestamp: abs_send_time,
+                    }),
+                ],
             )
             .await
         {
