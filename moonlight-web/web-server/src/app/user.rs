@@ -5,7 +5,10 @@ use std::{
 };
 
 use common::api_bindings::{self, DetailedUser};
-use moonlight_common::network::{ApiError, ClientInfo, host_info, request_client::RequestClient};
+use moonlight_common::network::{
+    ApiError, ClientInfo, host_info,
+    request_client::{RequestClient, RequestError},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -85,12 +88,6 @@ impl User {
         let app = self.app.access()?;
 
         Ok(app.config.web_server.default_user_id.map(UserId) == Some(self.id))
-    }
-
-    pub async fn name(&mut self) -> Result<String, AppError> {
-        let storage = self.storage_user().await?;
-
-        Ok(storage.name)
     }
 
     pub async fn detailed_user(
@@ -275,7 +272,8 @@ impl AuthenticatedUser {
         let unique_id = self.host_unique_id().await?;
 
         let mut client = MoonlightClient::with_defaults().map_err(ApiError::RequestClient)?;
-        let info = host_info(
+
+        let info = match host_info(
             &mut client,
             false,
             &format!("{}:{}", address, http_port),
@@ -284,7 +282,14 @@ impl AuthenticatedUser {
                 unique_id: &unique_id,
             }),
         )
-        .await?;
+        .await
+        {
+            Ok(info) => info,
+            Err(ApiError::RequestClient(err)) if err.is_connect() => {
+                return Err(AppError::HostNotFound);
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         let host = app
             .storage

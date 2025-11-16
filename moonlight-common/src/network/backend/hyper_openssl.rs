@@ -91,7 +91,6 @@ impl RequestClient for HyperOpenSSLClient {
         })
     }
     fn with_defaults_long_timeout() -> Result<Self, Self::Error> {
-        // TODO
         Ok(Self {
             ssl_ctx: None,
             timeout: Duration::from_secs(90),
