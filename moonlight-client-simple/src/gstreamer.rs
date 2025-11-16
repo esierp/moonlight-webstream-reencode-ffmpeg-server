@@ -12,9 +12,9 @@ use moonlight_common::stream::{
     audio::AudioDecoder,
     bindings::{
         AudioConfig, Capabilities, DecodeResult, FrameType, OpusMultistreamConfig,
-        SupportedVideoFormats, VideoDecodeUnit, VideoFormat,
+        SupportedVideoFormats, VideoDecodeUnit,
     },
-    video::VideoDecoder,
+    video::{VideoDecoder, VideoSetup},
 };
 
 pub fn init() {
@@ -92,11 +92,13 @@ impl GStreamerVideoHandler {
 impl VideoDecoder for GStreamerVideoHandler {
     fn setup(
         &mut self,
-        format: VideoFormat,
-        width: u32,
-        height: u32,
-        redraw_rate: u32,
-        flags: i32,
+        VideoSetup {
+            format,
+            width,
+            height,
+            redraw_rate,
+            flags,
+        }: VideoSetup,
     ) -> i32 {
         println!("Starting Stream: format: {format:?}, video: {width}x{height}x{redraw_rate}");
         let _ = (format, width, height, redraw_rate, flags);
