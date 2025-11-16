@@ -11,7 +11,7 @@ use log::{LevelFilter, debug, info, warn};
 use moonlight_common::{
     MoonlightError,
     high::{HostError, MoonlightHost},
-    network::backend::hyper_openssl::HyperOpenSSLClient,
+    network::backend::reqwest::ReqwestClient,
     pair::ClientAuth,
     stream::{
         MoonlightInstance, MoonlightStream,
@@ -62,7 +62,7 @@ use crate::{
     video::{register_video_codecs, spawn_video_thread},
 };
 
-pub type RequestClient = HyperOpenSSLClient;
+pub type RequestClient = ReqwestClient;
 
 mod audio;
 mod buffer;
