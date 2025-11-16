@@ -171,6 +171,8 @@ pub struct WebServerConfig {
     pub session_cookie_secure: bool,
     #[serde(default = "default_session_cookie_expiration")]
     pub session_cookie_expiration: Duration,
+    pub first_login_create_admin: bool,
+    pub first_login_assign_global_hosts: bool,
     pub default_user_id: Option<u32>,
 }
 
@@ -188,6 +190,8 @@ impl Default for WebServerConfig {
             url_path_prefix: "".to_string(),
             session_cookie_secure: default_session_cookie_secure(),
             session_cookie_expiration: default_session_cookie_expiration(),
+            first_login_create_admin: true,
+            first_login_assign_global_hosts: true,
             default_user_id: None,
         }
     }

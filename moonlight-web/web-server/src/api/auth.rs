@@ -99,12 +99,28 @@ async fn login(
     app: Data<App>,
     Json(request): Json<PostLoginRequest>,
 ) -> Result<HttpResponse, Error> {
-    let user = app
-        .user_by_auth(UserAuth::UserPassword {
+    let user = if app.config().web_server.first_login_create_admin {
+        match app
+            .try_add_first_login(request.name.clone(), request.password.clone())
+            .await
+        {
+            Ok(user) => user,
+            Err(AppError::FirstUserAlreadyExists) => {
+                app.user_by_auth(UserAuth::UserPassword {
+                    username: request.name,
+                    password: request.password,
+                })
+                .await?
+            }
+            Err(err) => return Err(err.into()),
+        }
+    } else {
+        app.user_by_auth(UserAuth::UserPassword {
             username: request.name,
             password: request.password,
         })
-        .await?;
+        .await?
+    };
 
     let session_expiration = app.config().web_server.session_cookie_expiration;
 

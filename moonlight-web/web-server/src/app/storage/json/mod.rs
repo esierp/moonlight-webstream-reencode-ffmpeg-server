@@ -385,6 +385,11 @@ impl Storage for JsonStorage {
         let out = join_all(futures).await;
         Ok(Either::Right(out))
     }
+    async fn any_user_exists(&self) -> Result<bool, AppError> {
+        let users = self.users.read().await;
+
+        Ok(!users.is_empty())
+    }
 
     async fn create_session_token(
         &self,

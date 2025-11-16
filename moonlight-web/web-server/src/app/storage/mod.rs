@@ -118,6 +118,7 @@ pub trait Storage {
     async fn remove_user(&self, user_id: UserId) -> Result<(), AppError>;
     /// The returned tuple can contain a Vec<UserId> or Vec<StorageUser> if the Storage thinks it's more efficient to query all data directly
     async fn list_users(&self) -> Result<Either<Vec<UserId>, Vec<StorageUser>>, AppError>;
+    async fn any_user_exists(&self) -> Result<bool, AppError>;
 
     async fn create_session_token(
         &self,

@@ -24,8 +24,9 @@ use crate::{
     app::{
         auth::{SessionToken, UserAuth},
         host::{AppId, HostId},
-        storage::{Either, Storage, StorageUserAdd, create_storage},
-        user::{Admin, AuthenticatedUser, User, UserId},
+        password::StoragePassword,
+        storage::{Either, Storage, StorageHostModify, StorageUserAdd, create_storage},
+        user::{Admin, AuthenticatedUser, Role, User, UserId},
     },
 };
 
@@ -41,6 +42,10 @@ pub enum AppError {
     AppDestroyed,
     #[error("the user was not found")]
     UserNotFound,
+    #[error("more than one user already exists")]
+    FirstUserAlreadyExists,
+    #[error("the config option first_login_create_admin is not true")]
+    FirstLoginCreateAdminNotSet,
     #[error("the user already exists")]
     UserAlreadyExists,
     #[error("the host was not found")]
@@ -108,6 +113,8 @@ impl ResponseError for AppError {
     fn status_code(&self) -> StatusCode {
         match self {
             Self::AppDestroyed => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::FirstUserAlreadyExists => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::FirstLoginCreateAdminNotSet => StatusCode::INTERNAL_SERVER_ERROR,
             Self::HostNotFound => StatusCode::NOT_FOUND,
             Self::HostNotPaired => StatusCode::FORBIDDEN,
             Self::HostPaired => StatusCode::NOT_MODIFIED,
@@ -178,6 +185,61 @@ impl App {
         &self.inner.config
     }
 
+    /// Handles all logic related to adding the first user:
+    /// - Is this even currently allowed?
+    /// - Moving hosts from global to first user
+    pub async fn try_add_first_login(
+        &self,
+        username: String,
+        password: String,
+    ) -> Result<AuthenticatedUser, AppError> {
+        if !self.config().web_server.first_login_create_admin {
+            return Err(AppError::FirstLoginCreateAdminNotSet);
+        }
+
+        let any_user_exists = self.inner.storage.any_user_exists().await?;
+        if any_user_exists {
+            return Err(AppError::FirstUserAlreadyExists);
+        }
+
+        let mut user = self
+            .add_user_no_auth(StorageUserAdd {
+                name: username.clone(),
+                password: StoragePassword::new(&password)?,
+                role: Role::Admin,
+                client_unique_id: username,
+            })
+            .await?;
+
+        if self.config().web_server.first_login_assign_global_hosts {
+            // Note: only this user exists and all hosts are global, if migrated from v1 to v2
+            // -> list_hosts will show just global hosts
+
+            let hosts = user.hosts().await?;
+
+            let user_id = user.id();
+            for mut host in hosts {
+                match host
+                    .modify(
+                        &mut user,
+                        StorageHostModify {
+                            owner: Some(Some(user_id)),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(err) => {
+                        warn!("failed to move global host to new user {user_id:?}: {err:?}");
+                    }
+                }
+            }
+        }
+
+        Ok(user)
+    }
+
     /// admin: The admin that tries to do this action
     pub async fn add_user(
         &self,
@@ -187,10 +249,7 @@ impl App {
         self.add_user_no_auth(user).await
     }
 
-    pub async fn add_user_no_auth(
-        &self,
-        user: StorageUserAdd,
-    ) -> Result<AuthenticatedUser, AppError> {
+    async fn add_user_no_auth(&self, user: StorageUserAdd) -> Result<AuthenticatedUser, AppError> {
         if user.name.is_empty() {
             return Err(AppError::NameEmpty);
         }
