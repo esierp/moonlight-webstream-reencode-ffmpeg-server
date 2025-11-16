@@ -1,14 +1,16 @@
-use std::pin::Pin;
-
 use actix_web::{
     Error, FromRequest, HttpRequest, HttpResponse,
+    body::MessageBody,
     cookie::{Cookie, Expiration, SameSite, time::OffsetDateTime},
-    dev::Payload,
-    get, post,
+    dev::{Payload, ServiceRequest, ServiceResponse},
+    get,
+    middleware::Next,
+    post,
     web::{Data, Json},
 };
 use common::api_bindings::PostLoginRequest;
 use futures::future::{Ready, ready};
+use std::{pin::Pin, time::Duration};
 
 use crate::app::{
     App, AppError,
@@ -128,20 +130,8 @@ async fn login(
     let mut session_bytes = [0; _];
     let session_str = session.encode(&mut session_bytes);
 
-    let url_path_prefix = &app.config().web_server.url_path_prefix;
-
     Ok(HttpResponse::Ok()
-        .cookie(
-            Cookie::build(COOKIE_SESSION_TOKEN_NAME, session_str)
-                .path(url_path_prefix)
-                .same_site(SameSite::Strict)
-                .http_only(true) // not accessible via js
-                .secure(app.config().web_server.session_cookie_secure)
-                .expires(Expiration::DateTime(
-                    OffsetDateTime::now_utc() + session_expiration,
-                ))
-                .finish(),
-        )
+        .cookie(build_cookie(&app, session_expiration, session_str))
         .finish())
 }
 
@@ -156,11 +146,41 @@ async fn logout(app: Data<App>, auth: UserAuth, req: HttpRequest) -> Result<Http
 
     let mut response = HttpResponse::Ok().finish();
 
-    if let Some(session_cookie) = req.cookie(COOKIE_SESSION_TOKEN_NAME) {
-        response.add_removal_cookie(&session_cookie)?;
+    if req.cookie(COOKIE_SESSION_TOKEN_NAME).is_some() {
+        response.add_removal_cookie(&build_cookie(&app, Duration::ZERO, ""))?;
     }
 
     Ok(response)
+}
+
+pub async fn auth_middleware(
+    req: ServiceRequest,
+    next: Next<impl MessageBody>,
+) -> Result<ServiceResponse<impl MessageBody>, Error> {
+    let Some(app) = req.app_data::<Data<App>>().cloned() else {
+        return Err(AppError::AppDestroyed.into());
+    };
+
+    let mut response = next.call(req).await?;
+    if let Some(err) = response.response().error()
+        && let Some(AppError::SessionTokenNotFound) = err.as_error::<AppError>()
+    {
+        response
+            .response_mut()
+            .add_removal_cookie(&build_cookie(&app, Duration::ZERO, ""))?;
+    }
+
+    Ok(response)
+}
+
+pub fn build_cookie<'a>(app: &'a App, expiration: Duration, session_str: &'a str) -> Cookie<'a> {
+    Cookie::build(COOKIE_SESSION_TOKEN_NAME, session_str)
+        .path(&app.config().web_server.url_path_prefix)
+        .same_site(SameSite::Strict)
+        .http_only(true) // not accessible via js
+        .secure(app.config().web_server.session_cookie_secure)
+        .expires(Expiration::DateTime(OffsetDateTime::now_utc() + expiration))
+        .finish()
 }
 
 #[get("/authenticate")]

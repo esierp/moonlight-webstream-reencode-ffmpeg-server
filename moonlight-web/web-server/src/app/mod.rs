@@ -91,25 +91,6 @@ pub enum AppError {
 }
 
 impl ResponseError for AppError {
-    fn error_response(&self) -> HttpResponse {
-        match self {
-            Self::SessionTokenNotFound => {
-                let mut response = HttpResponse::Conflict().finish();
-
-                if let Err(err) =
-                    response.add_removal_cookie(&Cookie::named(COOKIE_SESSION_TOKEN_NAME))
-                {
-                    warn!(
-                        "failed to set removal cookie for session cookie({COOKIE_SESSION_TOKEN_NAME}): {err:?}"
-                    );
-                }
-
-                response
-            }
-            _ => HttpResponse::new(self.status_code()),
-        }
-    }
-
     fn status_code(&self) -> StatusCode {
         match self {
             Self::AppDestroyed => StatusCode::INTERNAL_SERVER_ERROR,

@@ -1,7 +1,9 @@
 use actix_web::{
     HttpResponse, delete,
     dev::HttpServiceFactory,
-    get, post, services,
+    get,
+    middleware::from_fn,
+    post, services,
     web::{self, Bytes, Data, Json, Query},
 };
 use futures::future::try_join_all;
@@ -12,6 +14,7 @@ use tokio::spawn;
 use crate::{
     api::{
         admin::{add_user, delete_user, list_users, patch_user},
+        auth::auth_middleware,
         response_streaming::StreamedResponse,
     },
     app::{
@@ -259,6 +262,7 @@ async fn get_app_image(
 
 pub fn api_service() -> impl HttpServiceFactory {
     web::scope("/api")
+        .wrap(from_fn(auth_middleware))
         .service(services![
             // -- Auth
             auth::login,

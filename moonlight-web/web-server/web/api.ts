@@ -270,7 +270,9 @@ export async function apiLogout(api: Api): Promise<boolean> {
     return true
 }
 
-export async function apiAuthenticate(api: Api): Promise<boolean> {
+export async function apiAuthenticate(api: Api, retryOnFail?: boolean): Promise<boolean> {
+    const retryOnFail_ = retryOnFail === undefined ? true : retryOnFail
+
     let response
     try {
         response = await fetchApi(api, "/authenticate", GET, { response: "ignore" })
@@ -279,9 +281,9 @@ export async function apiAuthenticate(api: Api): Promise<boolean> {
             const response = e.getResponse()
             if (response?.status == 401) {
                 return false
-            } else if (response?.status == 409) {
+            } else if (response?.status == 409 && retryOnFail_) {
                 // 409 = Conflict, SessionTokenNotFound -> requires a new request
-                return await apiAuthenticate(api)
+                return await apiAuthenticate(api, false)
             } else {
                 throw e
             }
