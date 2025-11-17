@@ -1,11 +1,10 @@
 
-# Docs Missing
-- config and things depending on it
+# TODO
 - dockerfile
 
 # Moonlight Web
 An unofficial [Moonlight Client](https://moonlight-stream.org/) allowing you to stream your pc to the Web.
-It hosts Web Server which will forward [Sunshine](https://docs.lizardbyte.dev/projects/sunshine/latest/) traffic to a Browser using the [WebRTC Api](https://webrtc.org/).
+It hosts a Web Server which will forward [Sunshine](https://docs.lizardbyte.dev/projects/sunshine/latest/) traffic to a Browser using the [WebRTC Api](https://webrtc.org/).
 
 ![An image displaying: PC with sunshine and moonlight web installed, a browser making requests to it](/readme/structure.png)
 
@@ -46,29 +45,21 @@ It hosts Web Server which will forward [Sunshine](https://docs.lizardbyte.dev/pr
 
 3. Run the "web-server" executable
 
-4. Change your [access credentials](#credentials) in the newly generated `server/config.json` (all changes require a restart)
-
-5. Go to `localhost:8080` and view the web interface. You can also the change [bind address](#bind-address).
+4. Go to `localhost:8080` and view the web interface. You can also the change [bind address](#bind-address).
 
 ## Setup
 
-Add your pc:
+1. Add a new user by typing in your name and password. The first user will be the admin.
 
-1. Add a new pc (<img src="moonlight-web/web-server/web/resources/ic_add_to_queue_white_48px.svg" alt="icon" style="height:1em; vertical-align:middle;">) with the address as `localhost` and leave the port empty (if you've got the default port)
+2. Add a new pc (<img src="moonlight-web/web-server/web/resources/ic_add_to_queue_white_48px.svg" alt="icon" style="height:1em; vertical-align:middle;">) with the address as `localhost` and leave the port empty (if you've got the default port)
 
-2. Pair your pc by clicking on the host (<img src="moonlight-web/web-server/web/resources/desktop_windows-48px.svg" alt="icon" style="height:1em; vertical-align:middle;">) and entering the code in sunshine
+2. Pair your pc by clicking on the host (<img src="moonlight-web/web-server/web/resources/desktop_windows-48px.svg" alt="icon" style="height:1em; vertical-align:middle;">). Then enter the code in sunshine
 
 3. Launch an app
 
 ### Streaming over the Internet
 
-1. Set the [bind address](#bind-address) to the one of your network and forward the web server port (default is 8080, http is 80, https is 443)
-
-```json
-{
-    "bind_address": "192.168.1.1:80"
-}
-```
+1. Forward the web server port on your router (default is 8080, http is 80, https is 443). You can see this in the config as the [`bind_address`](#bind-address)
 
 When in a local network the WebRTC Peers will negotatiate without any problems.
 When you want to play to over the Internet the STUN servers included by default will try to negotiate the peers directly.
@@ -83,31 +74,33 @@ If this is the case try to configure one or both of these options:
 2. Add your turn server to your WebRTC Ice Server list
 ```json
 {
-    "webrtc_ice_servers": [
-        {
-            "urls": [
-                "stun:stun.l.google.com:19302",
-                "stun:stun.l.google.com:5349",
-                "stun:stun1.l.google.com:3478",
-                "stun:stun1.l.google.com:5349",
-                "stun:stun2.l.google.com:19302",
-                "stun:stun2.l.google.com:5349",
-                "stun:stun3.l.google.com:3478",
-                "stun:stun3.l.google.com:5349",
-                "stun:stun4.l.google.com:19302",
-                "stun:stun4.l.google.com:5349",
-            ]
-        },
-        {
-            "urls": [
-                    "turn:yourip.com:3478?transport=udp",
-                    "turn:yourip.com:3478?transport=tcp",
-                    "turn:yourip.com:5349?transport=tcp"
-            ],
-            "username": "your username",
-            "credential": "your credential"
-        }
-    ]
+    "webrtc": {
+        "ice_servers": [
+            {
+                "urls": [
+                    "stun:stun.l.google.com:19302",
+                    "stun:stun.l.google.com:5349",
+                    "stun:stun1.l.google.com:3478",
+                    "stun:stun1.l.google.com:5349",
+                    "stun:stun2.l.google.com:19302",
+                    "stun:stun2.l.google.com:5349",
+                    "stun:stun3.l.google.com:3478",
+                    "stun:stun3.l.google.com:5349",
+                    "stun:stun4.l.google.com:19302",
+                    "stun:stun4.l.google.com:5349",
+                ]
+            },
+            {
+                "urls": [
+                        "turn:yourip.com:3478?transport=udp",
+                        "turn:yourip.com:3478?transport=tcp",
+                        "turn:yourip.com:5349?transport=tcp"
+                ],
+                "username": "your username",
+                "credential": "your credential"
+            }
+        ]
+    }
 }
 ```
 Some (business) firewalls might be very strict and only allow tcp on port 443 for turn connections if that's the case also bind the turn server on port 443 and add `"turn:yourip.com:443?transport=tcp"` to the url's list.
@@ -117,9 +110,11 @@ Some (business) firewalls might be very strict and only allow tcp on port 443 fo
 1. Set the port range used by the WebRTC Peer to a fixed range in the [config](#config)
 ```json
 {
-    "webrtc_port_range": {
-        "min": 40000,
-        "max": 40010
+    "webrtc": {
+        "port_range": {
+            "min": 40000,
+            "max": 40010
+        }
     }
 }
 ```
@@ -129,11 +124,13 @@ If you're using Windows Defender make sure to allow NAT Traversal. Important: If
 3. Configure [WebRTC Nat 1 To 1](#webrtc-nat-1-to-1-ips) to advertise your [public ip](https://whatismyipaddress.com/) (Optional: WebRTC stun servers can usually automatically detect them):
 ```json
 {
-    "webrtc_nat_1to1": {
-        "ice_candidate_type": "host",
-        "ips": [
-            "74.125.224.72"
-        ]
+    "webrtc": {
+        "nat_1to1": {
+            "ice_candidate_type": "host",
+            "ips": [
+                "74.125.224.72"
+            ]
+        }
     }
 }
 ```
@@ -158,9 +155,11 @@ python ./moonlight-web/web-server/generate_certificate.py
 3. Modify the [config](#config) to enable https using the certificates
 ```json
 {
-    "certificate": {
-        "private_key_pem": "./server/key.pem",
-        "certificate_pem": "./server/cert.pem"
+    "webrtc": {
+        "certificate": {
+            "private_key_pem": "./server/key.pem",
+            "certificate_pem": "./server/cert.pem"
+        }
     }
 }
 ```
@@ -201,10 +200,12 @@ ProxyPassReverse ${MOONLIGHT_SUBPATH}/ http://${MOONLIGHT_STREAMER}/
 sudo a2enconf moonlight-web
 ```
 
-4. Change [config](#config) to include the [prefixed path](#web-path-prefix)
+4. Change [config](#config) to include the [prefixed path](#url-path-prefix)
 ```json
 {
-    "web_path_prefix": "/moonlight"
+    "web_server": {
+        "url_path_prefix": "/moonlight"
+    }
 }
 ```
 
@@ -216,32 +217,26 @@ Here are the most important settings for configuring Moonlight Web.
 
 For a full list of values look into the [Rust Config module](moonlight-web/common/src/config.rs).
 
-### Credentials
-The credentials the Website will prompt you to enter.
-Change this from the default value to the credentials for the website.
-
-```json
-{
-    "credentials": "your password"
-}
-```
-
-If you set this null authentication will be disabled and the `Authorization` header won't be used in requests.
-
-```json
-{
-    "credentials": null
-}
-```
-
 ### Bind Address 
 The address and port the website will run on
 
 ```json
 {
-    ..
-    "bind_address": "0.0.0.0:8080"
-    ..
+    "web_server": {
+        "bind_address": "0.0.0.0:8080"
+    }
+}
+```
+
+### Default User
+The user id which is selected by default when providing no login.
+Go into the Admin Panel and look for the user id of the user you want to make the default.
+
+```json
+{
+    "web_server": {
+        "default_user_id": 1284358932
+    }
 }
 ```
 
@@ -250,9 +245,11 @@ If enabled the web server will use https with the provided certificate data
 
 ```json
 {
-    "certificate": {
-        "private_key_pem": "./server/key.pem",
-        "certificate_pem": "./server/cert.pem"
+    "web_server":{
+        "certificate": {
+            "private_key_pem": "./server/key.pem",
+            "certificate_pem": "./server/cert.pem"
+        }
     }
 }
 ```
@@ -262,9 +259,11 @@ This will set the port range on the web server used to communicate when using We
 
 ```json
 {
-    "webrtc_port_range": {
-        "min": 40000,
-        "max": 40010
+    "webrtc": {
+        "port_range": {
+            "min": 40000,
+            "max": 40010
+        }
     }
 }
 ```
@@ -274,22 +273,24 @@ A list of ice servers for webrtc to use.
 
 ```json
 {
-    "webrtc_ice_servers": [
-        {
-            "urls": [
-                "stun:stun.l.google.com:19302",
-                "stun:stun.l.google.com:5349",
-                "stun:stun1.l.google.com:3478",
-                "stun:stun1.l.google.com:5349",
-                "stun:stun2.l.google.com:19302",
-                "stun:stun2.l.google.com:5349",
-                "stun:stun3.l.google.com:3478",
-                "stun:stun3.l.google.com:5349",
-                "stun:stun4.l.google.com:19302",
-                "stun:stun4.l.google.com:5349",
-            ]
-        }
-    ]
+    "webrtc": {
+        "ice_servers": [
+            {
+                "urls": [
+                    "stun:stun.l.google.com:19302",
+                    "stun:stun.l.google.com:5349",
+                    "stun:stun1.l.google.com:3478",
+                    "stun:stun1.l.google.com:5349",
+                    "stun:stun2.l.google.com:19302",
+                    "stun:stun2.l.google.com:5349",
+                    "stun:stun3.l.google.com:3478",
+                    "stun:stun3.l.google.com:5349",
+                    "stun:stun4.l.google.com:19302",
+                    "stun:stun4.l.google.com:5349",
+                ]
+            }
+        ]
+    }
 }
 ```
 
@@ -303,11 +304,13 @@ It's recommended to set this but stun servers should figure out the public ip.
 
 ```json
 {
-    "webrtc_nat_1to1": {
-        "ice_candidate_type": "host",
-        "ips": [
-            "74.125.224.72"
-        ]
+    "webrtc": {
+        "nat_1to1": {
+            "ice_candidate_type": "host",
+            "ips": [
+                "74.125.224.72"
+            ]
+        }
     }
 }
 ```
@@ -322,20 +325,24 @@ This will set the network types allowed by webrtc.
 
 ```json
 {
-    "webrtc_network_types": [
-        "udp4",
-        "udp6",
-    ]
+    "webrtc": {
+        "network_types": [
+            "udp4",
+            "udp6",
+        ]
+    }
 }
 ```
 
-### Web Path Prefix
+### Url Path Prefix
 This is useful when rerouting the web page using services like [Apache 2](#proxying-via-apache-2).
 Will always append the prefix to all requests made by the website.
 
 ```json
 {
-    "web_path_prefix": "/moonlight"
+    "web_server": {
+        "url_path_prefix": "/moonlight"
+    }
 }
 ```
 

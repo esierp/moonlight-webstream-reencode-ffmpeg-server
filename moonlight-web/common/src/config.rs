@@ -162,6 +162,7 @@ fn default_include_loopback_candidates() -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebServerConfig {
+    // TODO: create streamer overwrite for ice servers
     #[serde(default = "default_bind_address")]
     pub bind_address: SocketAddr,
     pub certificate: Option<ConfigSsl>,
