@@ -70,7 +70,7 @@ pub async fn start_host(
             fps,
             width,
             height,
-            video_sample_queue_size,
+            video_frame_queue_size,
             play_audio_local,
             audio_sample_queue_size,
             video_supported_formats,
@@ -93,7 +93,7 @@ pub async fn start_host(
             fps,
             width,
             height,
-            video_sample_queue_size,
+            video_frame_queue_size,
             audio_sample_queue_size,
             play_audio_local,
             video_supported_formats: SupportedVideoFormats::from_bits(video_supported_formats)

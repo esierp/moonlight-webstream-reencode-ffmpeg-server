@@ -88,12 +88,12 @@ enum VideoCodec {
 pub fn spawn_video_thread(
     stream: Arc<StreamConnection>,
     supported_formats: SupportedVideoFormats,
-    channel_queue_size: usize,
+    frame_queue_size: usize,
 ) -> PullVideoDecoder {
     let (decoder, manager) = PullVideoManager::new(supported_formats);
 
     spawn(move || {
-        video_thread(stream, manager, supported_formats, channel_queue_size);
+        video_thread(stream, manager, supported_formats, frame_queue_size);
     });
 
     decoder
@@ -103,10 +103,10 @@ fn video_thread(
     stream: Arc<StreamConnection>,
     mut manager: PullVideoManager,
     supported_formats: SupportedVideoFormats,
-    channel_queue_size: usize,
+    frame_queue_size: usize,
 ) {
     let mut sender: TrackLocalSender<SequencedTrackLocalStaticRTP> =
-        TrackLocalSender::new(stream.clone(), channel_queue_size);
+        TrackLocalSender::new(stream.clone(), frame_queue_size);
     let needs_idr = Arc::new(AtomicBool::new(false));
     let mut clock_rate = 0;
     let mut video_codec = None;
@@ -303,7 +303,13 @@ fn send_single_frame(
     important: bool,
     needs_idr: &AtomicBool,
 ) {
+    if important {
+        sender.blocking_clear_queue(false);
+    }
+
     let mut peekable = samples.drain(..).peekable();
+
+    let mut frame_samples = Vec::new();
     while let Some(sample) = peekable.next() {
         let packets = match packetize(
             payloader,
@@ -320,12 +326,14 @@ fn send_single_frame(
             }
         };
 
-        for packet in packets {
-            if let Ok(false) = sender.send_sample(packet, important) {
-                // We've dropped a frame (likely due to buffering)
-                needs_idr.store(true, Ordering::Release);
-            }
-        }
+        frame_samples.extend(packets);
+    }
+
+    if !sender.blocking_send_samples(frame_samples, important) {
+        sender.blocking_clear_queue(true);
+
+        // We've dropped a frame (likely due to buffering)
+        needs_idr.store(true, Ordering::Release);
     }
 }
 

@@ -14,7 +14,7 @@ pub struct StreamSettings {
     pub fps: u32,
     pub width: u32,
     pub height: u32,
-    pub video_sample_queue_size: u32,
+    pub video_frame_queue_size: u32,
     pub audio_sample_queue_size: u32,
     pub play_audio_local: bool,
     pub video_supported_formats: SupportedVideoFormats,

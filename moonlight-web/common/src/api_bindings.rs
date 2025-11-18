@@ -306,7 +306,7 @@ pub enum StreamClientMessage {
         fps: u32,
         width: u32,
         height: u32,
-        video_sample_queue_size: u32,
+        video_frame_queue_size: u32,
         play_audio_local: bool,
         audio_sample_queue_size: u32,
         video_supported_formats: u32,

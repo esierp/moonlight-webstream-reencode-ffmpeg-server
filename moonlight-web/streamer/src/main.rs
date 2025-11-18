@@ -636,7 +636,7 @@ impl StreamConnection {
         let video_decoder = spawn_video_thread(
             self.clone(),
             self.settings.video_supported_formats,
-            self.settings.video_sample_queue_size as usize,
+            self.settings.video_frame_queue_size as usize,
         );
 
         let audio_decoder = OpusTrackSampleAudioDecoder::new(

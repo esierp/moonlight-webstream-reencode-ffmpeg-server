@@ -8,7 +8,7 @@ export type StreamSettings = {
     sidebarEdge: SidebarEdge,
     bitrate: number
     packetSize: number
-    videoSampleQueueSize: number
+    videoFrameQueueSize: number
     videoSize: "720p" | "1080p" | "1440p" | "4k" | "native" | "custom"
     videoSizeCustom: {
         width: number
@@ -31,7 +31,7 @@ export function defaultStreamSettings(): StreamSettings {
         bitrate: 10000,
         packetSize: 2048,
         fps: 60,
-        videoSampleQueueSize: 20,
+        videoFrameQueueSize: 3,
         videoSize: "1080p",
         videoSizeCustom: {
             width: 1920,
@@ -196,9 +196,9 @@ export class StreamSettingsComponent implements Component {
         this.videoSizeHeight.mount(this.divElement)
 
         // Video Sample Queue Size
-        this.videoSampleQueueSize = new InputComponent("videoSampleQueueSize", "number", "Video Sample Queue Size", {
-            defaultValue: defaultSettings.videoSampleQueueSize.toString(),
-            value: settings?.videoSampleQueueSize?.toString()
+        this.videoSampleQueueSize = new InputComponent("videoFrameQueueSize", "number", "Video Frame Queue Size", {
+            defaultValue: defaultSettings.videoFrameQueueSize.toString(),
+            value: settings?.videoFrameQueueSize?.toString()
         })
         this.videoSampleQueueSize.addChangeListener(this.onSettingsChange.bind(this))
         this.videoSampleQueueSize.mount(this.divElement)
@@ -316,7 +316,7 @@ export class StreamSettingsComponent implements Component {
             width: parseInt(this.videoSizeWidth.getValue()),
             height: parseInt(this.videoSizeHeight.getValue())
         }
-        settings.videoSampleQueueSize = parseInt(this.videoSampleQueueSize.getValue())
+        settings.videoFrameQueueSize = parseInt(this.videoSampleQueueSize.getValue())
         settings.dontForceH264 = this.forceH264.isChecked()
 
         settings.playAudioLocal = this.playAudioLocal.isChecked()

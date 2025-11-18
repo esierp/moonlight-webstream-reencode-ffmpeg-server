@@ -87,7 +87,7 @@ export class Stream {
                 fps,
                 width: this.streamerSize[0],
                 height: this.streamerSize[1],
-                video_sample_queue_size: this.settings.videoSampleQueueSize,
+                video_frame_queue_size: this.settings.videoFrameQueueSize,
                 play_audio_local: this.settings.playAudioLocal,
                 audio_sample_queue_size: this.settings.audioSampleQueueSize,
                 video_supported_formats: createSupportedVideoFormatsBits(supportedVideoFormats),

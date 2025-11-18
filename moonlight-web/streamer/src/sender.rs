@@ -1,13 +1,11 @@
 use std::{
-    sync::Arc,
+    collections::VecDeque,
+    sync::{Arc, Weak},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use log::{debug, warn};
-use tokio::sync::{
-    Mutex,
-    mpsc::{Receiver, Sender, channel, error::TrySendError},
-};
+use tokio::sync::{Mutex, Notify};
 use webrtc::{
     media::Sample,
     rtcp::packet::Packet,
@@ -32,7 +30,16 @@ where
 {
     channel_queue_size: usize,
     pub(crate) stream: Arc<StreamConnection>,
-    sender: Option<Sender<Track::Sample>>,
+    new_samples_notify: Arc<Notify>,
+    queue: Arc<Mutex<VecDeque<FrameSamples<Track>>>>,
+}
+
+struct FrameSamples<Track>
+where
+    Track: TrackLike,
+{
+    important: bool,
+    samples: Vec<Track::Sample>,
 }
 
 impl<Track> TrackLocalSender<Track>
@@ -43,7 +50,8 @@ where
         Self {
             channel_queue_size,
             stream,
-            sender: Default::default(),
+            new_samples_notify: Default::default(),
+            queue: Default::default(),
         }
     }
 
@@ -56,12 +64,12 @@ where
 
         let track = Arc::new(track);
 
-        let (sender, receiver) = channel(self.channel_queue_size);
-
+        let new_samples_notify = self.new_samples_notify.clone();
+        let queue = Arc::downgrade(&self.queue);
         self.stream.runtime.spawn({
             let track = track.clone();
             async move {
-                sample_sender(track, receiver).await;
+                sample_sender(track, &new_samples_notify, queue).await;
             }
         });
 
@@ -82,58 +90,88 @@ where
             }
         });
 
-        self.sender.replace(sender);
-
         Ok(())
     }
 
     /// Returns if the frame will be delivered
-    pub fn send_sample(&self, sample: Track::Sample, important: bool) -> Result<bool, ()> {
-        if let Some(sender) = self.sender.as_ref() {
-            if important {
-                let _ = sender.blocking_send(sample);
+    pub fn blocking_send_samples(&self, samples: Vec<Track::Sample>, important: bool) -> bool {
+        let mut queue = self.queue.blocking_lock();
 
-                return Ok(true);
-            } else {
-                return match sender.try_send(sample) {
-                    Ok(()) => Ok(true),
-                    Err(TrySendError::Full(_)) => {
-                        debug!("dropping sample on purpose because queue is full");
-                        Ok(false)
-                    }
-                    Err(TrySendError::Closed(_)) => Err(()),
-                };
+        self.new_samples_notify.notify_waiters();
+
+        if important {
+            queue.push_front(FrameSamples { important, samples });
+
+            true
+        } else {
+            if queue.len() > self.channel_queue_size {
+                return false;
             }
-        }
 
-        Err(())
+            queue.push_front(FrameSamples { important, samples });
+
+            true
+        }
+    }
+
+    /// Returns if the frame will be delivered
+    pub fn blocking_clear_queue(&self, clear_important: bool) {
+        let mut queue = self.queue.blocking_lock();
+
+        if clear_important {
+            queue.clear();
+        } else {
+            queue.retain(|frame| frame.important);
+        }
     }
 }
 
-async fn sample_sender<Track>(track: Arc<Track>, mut receiver: Receiver<Track::Sample>)
-where
+async fn sample_sender<Track>(
+    track: Arc<Track>,
+    new_samples_notify: &Notify,
+    queue: Weak<Mutex<VecDeque<FrameSamples<Track>>>>,
+) where
     Track: TrackLike,
 {
-    while let Some(sample) = receiver.recv().await {
+    loop {
+        let frame = {
+            let Some(queue) = queue.upgrade() else {
+                debug!("no sample queue available: stopping to submit samples");
+                continue;
+            };
+
+            let mut queue = queue.lock().await;
+            let Some(new_frame) = queue.pop_back() else {
+                drop(queue); // Important: drop the mutex
+
+                new_samples_notify.notified().await;
+                continue;
+            };
+
+            new_frame
+        };
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock went backwards");
         let now_secs = now.as_secs() as f64 + now.subsec_nanos() as f64 * 1e-9;
         let abs_send_time: u64 = (now_secs * 262_144.0) as u64;
 
-        if let Err(err) = track
-            .write_with_extensions(
-                sample,
-                &[
-                    HeaderExtension::PlayoutDelay(PlayoutDelayExtension::new(0, 0)),
-                    HeaderExtension::AbsSendTime(AbsSendTimeExtension {
-                        timestamp: abs_send_time,
-                    }),
-                ],
-            )
-            .await
-        {
-            warn!("[Stream]: track.write_sample failed: {err}");
+        for sample in frame.samples {
+            if let Err(err) = track
+                .write_with_extensions(
+                    sample,
+                    &[
+                        HeaderExtension::PlayoutDelay(PlayoutDelayExtension::new(0, 0)),
+                        HeaderExtension::AbsSendTime(AbsSendTimeExtension {
+                            timestamp: abs_send_time,
+                        }),
+                    ],
+                )
+                .await
+            {
+                warn!("[Stream]: track.write_sample failed: {err}");
+            }
         }
     }
 }

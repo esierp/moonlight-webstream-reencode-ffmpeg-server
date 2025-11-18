@@ -112,7 +112,7 @@ impl AudioDecoder for OpusTrackSampleAudioDecoder {
             ..Default::default()
         };
 
-        let _ = self.decoder.send_sample(sample, false);
+        self.decoder.blocking_send_samples(vec![sample], false);
     }
 
     fn config(&self) -> AudioConfig {
