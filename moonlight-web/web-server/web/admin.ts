@@ -30,10 +30,7 @@ async function startApp() {
 }
 
 async function checkPermissions(api: Api) {
-    const user = await apiGetUser(api, {
-        name: null,
-        user_id: null
-    })
+    const user = await apiGetUser(api)
 
     if (user.role != "Admin") {
         await showMessage("You are not authorized to view this page!")

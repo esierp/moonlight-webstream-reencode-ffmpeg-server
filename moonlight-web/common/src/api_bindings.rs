@@ -60,8 +60,16 @@ impl From<moonlight_common::PairStatus> for PairStatus {
 
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export, export_to = EXPORT_PATH)]
+pub enum HostOwner {
+    ThisUser,
+    Global,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
 pub struct UndetailedHost {
     pub host_id: u32,
+    pub owner: HostOwner,
     pub name: String,
     pub paired: PairStatus,
     /// None if offline else the state
@@ -72,6 +80,7 @@ pub struct UndetailedHost {
 #[ts(export, export_to = EXPORT_PATH)]
 pub struct DetailedHost {
     pub host_id: u32,
+    pub owner: HostOwner,
     pub name: String,
     pub paired: PairStatus,
     pub server_state: Option<HostState>,

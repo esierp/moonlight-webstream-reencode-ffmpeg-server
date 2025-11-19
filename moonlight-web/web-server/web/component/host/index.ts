@@ -1,5 +1,5 @@
-import { DetailedHost, UndetailedHost } from "../../api_bindings.js"
-import { Api, apiDeleteHost, apiGetHost, isDetailedHost, apiPostPair, apiWakeUp } from "../../api.js"
+import { DetailedHost, DetailedUser, UndetailedHost } from "../../api_bindings.js"
+import { Api, apiDeleteHost, apiGetHost, isDetailedHost, apiPostPair, apiWakeUp, apiGetUser } from "../../api.js"
 import { Component, ComponentEvent } from "../index.js"
 import { setContextMenu } from "../context_menu.js"
 import { showErrorPopup } from "../error.js"
@@ -12,6 +12,7 @@ export class Host implements Component {
     private api: Api
 
     private hostId: number
+    private userCache: DetailedUser | null = null
     private cache: UndetailedHost | DetailedHost | null = null
 
     private divElement: HTMLDivElement = document.createElement("div")
@@ -46,18 +47,23 @@ export class Host implements Component {
 
         // Update cache
         if (host != null) {
-            this.updateCache(host)
+            this.updateCache(host, null)
+
+            apiGetUser(api).then((user) => this.userCache = user)
         } else {
             this.forceFetch()
         }
     }
 
     async forceFetch() {
-        const newCache = await apiGetHost(this.api, {
-            host_id: this.hostId,
-        })
+        const [newCache, user] = await Promise.all([
+            apiGetHost(this.api, {
+                host_id: this.hostId,
+            }),
+            apiGetUser(this.api)
+        ])
 
-        this.updateCache(newCache)
+        this.updateCache(newCache, user)
     }
     async getCurrentGame(): Promise<number | null> {
         await this.forceFetch()
@@ -106,10 +112,14 @@ export class Host implements Component {
             })
         }
 
-        elements.push({
-            name: "Remove Host",
-            callback: this.remove.bind(this)
-        })
+        // TODO: if self is admin show a make global host and add api points
+
+        if (this.cache?.owner == "ThisUser" || this.userCache?.role == "Admin") {
+            elements.push({
+                name: "Remove Host",
+                callback: this.remove.bind(this)
+            })
+        }
 
         setContextMenu(event, {
             elements
@@ -127,7 +137,7 @@ export class Host implements Component {
             showErrorPopup(`failed to get details for host ${this.hostId}`)
             return;
         }
-        this.updateCache(host)
+        this.updateCache(host, this.userCache)
 
         await showMessage(
             `Web Id: ${host.host_id}\n` +
@@ -207,7 +217,7 @@ export class Host implements Component {
             throw `failed to pair (stage 2): ${resultResponse}`
         }
 
-        this.updateCache(resultResponse.Paired)
+        this.updateCache(resultResponse.Paired, null)
     }
 
     getHostId(): number {
@@ -218,7 +228,7 @@ export class Host implements Component {
         return this.cache
     }
 
-    updateCache(host: UndetailedHost | DetailedHost) {
+    updateCache(host: UndetailedHost | DetailedHost, user: DetailedUser | null) {
         if (this.getHostId() != host.host_id) {
             showErrorPopup(`tried to overwrite host ${this.getHostId()} with data from ${host.host_id}`)
             return
@@ -234,6 +244,10 @@ export class Host implements Component {
             } else {
                 this.cache = host
             }
+        }
+
+        if (user) {
+            this.userCache = user
         }
 
         // Update Elements

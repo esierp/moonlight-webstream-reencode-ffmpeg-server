@@ -4,7 +4,7 @@ use std::{
 };
 
 use actix_web::web::Bytes;
-use common::api_bindings::{self, DetailedHost, HostState, PairStatus, UndetailedHost};
+use common::api_bindings::{self, DetailedHost, HostOwner, HostState, PairStatus, UndetailedHost};
 use log::warn;
 use moonlight_common::{
     PairPin, ServerState,
@@ -102,9 +102,20 @@ impl Host {
     pub async fn owner(&self) -> Result<Option<UserId>, AppError> {
         let app = self.app.access()?;
 
-        let host = app.storage.get_host(self.id).await?;
+        let host = self.storage_host(&app).await?;
 
         Ok(host.owner)
+    }
+    async fn owner_info(
+        &self,
+        user: &AuthenticatedUser,
+        this: &StorageHost,
+    ) -> Result<HostOwner, AppError> {
+        Ok(match this.owner {
+            None => HostOwner::Global,
+            Some(user_id) if user.id() == user_id => HostOwner::ThisUser,
+            _ => unreachable!(),
+        })
     }
 
     pub async fn undetailed_host_cached(
@@ -115,12 +126,14 @@ impl Host {
 
         let app = self.app.access()?;
 
-        let host = self.storage_host(&app).await?;
+        let storage = self.storage_host(&app).await?;
+        let owner = self.owner_info(user, &storage).await?;
 
         Ok(UndetailedHost {
-            host_id: host.id.0,
-            name: host.cache.name,
-            paired: if host.pair_info.is_some() {
+            host_id: storage.id.0,
+            name: storage.cache.name,
+            owner,
+            paired: if storage.pair_info.is_some() {
                 PairStatus::Paired
             } else {
                 PairStatus::NotPaired
@@ -299,6 +312,9 @@ impl Host {
 
         let app = self.app.access()?;
 
+        let storage = self.storage_host(&app).await?;
+        let owner = self.owner_info(user, &storage).await?;
+
         match self.host_info(&app, user).await {
             Ok(Some(info)) => {
                 let server_state = match ServerState::from_str(&info.state_string) {
@@ -316,6 +332,7 @@ impl Host {
                 Ok(UndetailedHost {
                     host_id: self.id.0,
                     name: info.host_name,
+                    owner,
                     paired: info.pair_status.into(),
                     server_state: server_state.map(HostState::from),
                 })
@@ -332,6 +349,7 @@ impl Host {
                 Ok(UndetailedHost {
                     host_id: self.id.0,
                     name: host.cache.name,
+                    owner,
                     paired,
                     server_state: None,
                 })
@@ -346,7 +364,10 @@ impl Host {
         self.can_use(user).await?;
 
         let app = self.app.access()?;
-        let host = self.storage_host(&app).await?;
+
+        let storage = self.storage_host(&app).await?;
+
+        let owner = self.owner_info(user, &storage).await?;
 
         match self.host_info(&app, user).await {
             Ok(Some(info)) => {
@@ -364,11 +385,12 @@ impl Host {
 
                 Ok(DetailedHost {
                     host_id: self.id.0,
+                    owner,
                     name: info.host_name,
                     paired: info.pair_status.into(),
                     server_state: server_state.map(HostState::from),
-                    address: host.address,
-                    http_port: host.http_port,
+                    address: storage.address,
+                    http_port: storage.http_port,
                     https_port: info.https_port,
                     external_port: info.external_port,
                     version: info.app_version.to_string(),
@@ -382,7 +404,7 @@ impl Host {
                 })
             }
             Ok(None) => {
-                let paired = if host.pair_info.is_some() {
+                let paired = if storage.pair_info.is_some() {
                     PairStatus::Paired
                 } else {
                     PairStatus::NotPaired
@@ -390,17 +412,18 @@ impl Host {
 
                 Ok(DetailedHost {
                     host_id: self.id.0,
-                    name: host.cache.name,
+                    owner,
+                    name: storage.cache.name,
                     paired,
                     server_state: None,
-                    address: host.address,
-                    http_port: host.http_port,
+                    address: storage.address,
+                    http_port: storage.http_port,
                     https_port: 0,
                     external_port: 0,
                     version: "Offline".to_string(),
                     gfe_version: "Offline".to_string(),
                     unique_id: "Offline".to_string(),
-                    mac: host.cache.mac.map(|mac| mac.to_string()),
+                    mac: storage.cache.mac.map(|mac| mac.to_string()),
                     local_ip: "Offline".to_string(),
                     current_game: 0,
                     max_luma_pixels_hevc: 0,

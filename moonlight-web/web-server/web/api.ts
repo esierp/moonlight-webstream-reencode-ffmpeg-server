@@ -30,7 +30,7 @@ window.addEventListener("unhandledrejection", handleRejection)
 export async function getApi(): Promise<Api> {
     const host_url = buildUrl("/api")
 
-    let api = { host_url, bearer: null }
+    let api = { host_url, bearer: null, user: null }
 
     if (await apiAuthenticate(api)) {
         return api
@@ -50,7 +50,7 @@ export async function getApi(): Promise<Api> {
 export async function tryLogin(): Promise<Api | null> {
     const host_url = buildUrl("/api")
 
-    let api = { host_url, bearer: null }
+    let api = { host_url, bearer: null, user: null }
 
     const prompt = new ApiUserPasswordPrompt()
     const userAuth = await showModal(prompt)
@@ -78,6 +78,8 @@ const DELETE = "DELETE"
 export type Api = {
     host_url: string
     bearer: string | null,
+    // TODO: undetailed user?
+    user: DetailedUser | null,
 }
 
 export type ApiFetchInit = {
@@ -294,8 +296,16 @@ export async function apiAuthenticate(api: Api, retryOnFail?: boolean): Promise<
     return response != null
 }
 
-export async function apiGetUser(api: Api, query: GetUserQuery): Promise<DetailedUser> {
-    const response = await fetchApi(api, "/user", GET, { query })
+export async function apiGetUser(api: Api, query?: GetUserQuery): Promise<DetailedUser> {
+    if (!query || (query.name == null && query.user_id == null)) {
+        if (api.user) {
+            return api.user
+        }
+    }
+
+    const response = await fetchApi(api, "/user", GET, {
+        query: query ?? { name: null, user_id: null }
+    })
 
     return response as DetailedUser
 }

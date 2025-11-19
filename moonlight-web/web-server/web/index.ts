@@ -318,11 +318,7 @@ class MainApp implements Component {
         ])
     }
     private async refreshUserRole() {
-        this.user = await apiGetUser(this.api, {
-            // This will get it for the current user
-            name: null,
-            user_id: null,
-        })
+        this.user = await apiGetUser(this.api)
 
         if (this.topLineActions.contains(this.logoutButton)) {
             this.topLineActions.removeChild(this.logoutButton)

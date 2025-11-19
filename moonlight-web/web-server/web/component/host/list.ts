@@ -33,7 +33,7 @@ export class HostList extends FetchListComponent<DetailedHost | UndetailedHost, 
     }
 
     protected updateComponentData(component: Host, data: DetailedHost | UndetailedHost): void {
-        component.updateCache(data)
+        component.updateCache(data, null)
     }
     protected getComponentDataId(component: Host): number {
         return component.getHostId()
