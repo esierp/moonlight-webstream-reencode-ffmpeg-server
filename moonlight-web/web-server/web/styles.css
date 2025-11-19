@@ -539,6 +539,12 @@ input[type=number] {
     outline: none;
 }
 
+canvas.video-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
 .sidebar-stream {
     display: flex;
     flex-direction: column;
