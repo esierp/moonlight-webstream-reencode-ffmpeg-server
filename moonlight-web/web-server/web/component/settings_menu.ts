@@ -16,6 +16,7 @@ export type StreamSettings = {
     },
     fps: number
     dontForceH264: boolean
+    canvasRenderer: boolean
     playAudioLocal: boolean
     audioSampleQueueSize: number
     mouseScrollMode: MouseScrollMode
@@ -36,6 +37,7 @@ export function defaultStreamSettings(): StreamSettings {
             height: 1080,
         },
         dontForceH264: false,
+        canvasRenderer: false,
         playAudioLocal: false,
         audioSampleQueueSize: 20,
         mouseScrollMode: "highres",
@@ -82,6 +84,7 @@ export class StreamSettingsComponent implements Component {
     private packetSize: InputComponent
     private fps: InputComponent
     private forceH264: InputComponent
+    private canvasRenderer: InputComponent
 
     private videoSize: SelectComponent
     private videoSizeWidth: InputComponent
@@ -204,6 +207,13 @@ export class StreamSettingsComponent implements Component {
         this.forceH264.addChangeListener(this.onSettingsChange.bind(this))
         this.forceH264.mount(this.divElement)
 
+        // Use Canvas Renderer
+        this.canvasRenderer = new InputComponent("canvasRenderer", "checkbox", "Use Canvas Renderer (Experimental)", {
+            defaultValue: defaultSettings.canvasRenderer.toString(),
+            checked: settings === null || settings === void 0 ? void 0 : settings.canvasRenderer
+        })
+        this.canvasRenderer.addChangeListener(this.onSettingsChange.bind(this))
+        this.canvasRenderer.mount(this.divElement)
 
         // Audio local
         this.audioHeader.innerText = "Audio"
@@ -311,6 +321,7 @@ export class StreamSettingsComponent implements Component {
         }
         settings.videoSampleQueueSize = parseInt(this.videoSampleQueueSize.getValue())
         settings.dontForceH264 = this.forceH264.isChecked()
+        settings.canvasRenderer = this.canvasRenderer.isChecked()
 
         settings.playAudioLocal = this.playAudioLocal.isChecked()
         settings.audioSampleQueueSize = parseInt(this.audioSampleQueueSize.getValue())

@@ -12,7 +12,8 @@ export type InfoEvent = CustomEvent<
     { type: "connectionComplete", capabilities: StreamCapabilities } |
     { type: "connectionStatus", status: ConnectionStatus } |
     { type: "connectionTerminated", errorCode: number } |
-    { type: "addDebugLine", line: string }
+    { type: "addDebugLine", line: string } |
+    { type: "videoTrack", track: MediaStreamTrack}
 >
 export type InfoEventListener = (event: InfoEvent) => void
 
@@ -359,17 +360,47 @@ export class Stream {
             this.debugLog(`playoutDelayHint not supported in receiver: ${event.receiver.track.label}`)
         }
 
-        const stream = event.streams[0]
-        if (stream) {
-            stream.getTracks().forEach(track => {
-                this.debugLog(`Adding Media Track ${track.label}`)
+        if(!this.settings?.canvasRenderer) {
+            const stream = event.streams[0]
+            if (stream) {
+                stream.getTracks().forEach(track => {
+                    this.debugLog(`Adding Media Track ${track.label}`)
 
-                if (track.kind == "video" && "contentHint" in track) {
+                    if (track.kind == "video" && "contentHint" in track) {
+                        track.contentHint = "motion"
+                    }
+
+                    this.mediaStream.addTrack(track)
+                })
+            }
+        }
+        else {
+            const track = event.track
+            this.debugLog(`Received Media Track ${track.label} (${track.kind})`)
+
+            if (track.kind === "video") {
+                if ("contentHint" in track) {
                     track.contentHint = "motion"
                 }
-
+                const customEvent = new CustomEvent("stream-info", {
+                    detail: {
+                        type: "videoTrack",
+                        track: track
+                    }
+                })
+                this.eventTarget.dispatchEvent(customEvent)
+            } else if (track.kind === "audio") {
                 this.mediaStream.addTrack(track)
-            })
+                const customEvent = new CustomEvent("stream-info", {
+                    detail: {
+                        type: "audioTrackAdded",
+                        track: track
+                    }
+                })
+                this.eventTarget.dispatchEvent(customEvent)
+            } else {
+                this.mediaStream.addTrack(track)
+            }
         }
     }
     private onConnectionStateChange() {
