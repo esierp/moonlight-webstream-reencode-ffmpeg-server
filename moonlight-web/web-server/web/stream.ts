@@ -105,13 +105,6 @@ class ViewerApp implements Component {
 
         this.settings = settings
 
-        // Configure canvas element
-        if(this.settings.canvasRenderer) {
-            this.canvasElement.classList.add("video-stream")
-            this.div.appendChild(this.canvasElement)
-            this.canvasRenderer = new CanvasRenderer(this.canvasElement)
-        }
-
         // Configure video element
         this.videoElement.classList.add("video-stream")
         this.videoElement.preload = "none"
@@ -120,6 +113,14 @@ class ViewerApp implements Component {
         this.videoElement.disablePictureInPicture = true
         this.videoElement.playsInline = true
         this.videoElement.muted = true
+
+        // Configure canvas element
+        if(this.settings.canvasRenderer) {
+            this.canvasElement.classList.add("video-stream")
+            this.div.appendChild(this.canvasElement)
+            this.canvasRenderer = new CanvasRenderer(this.canvasElement)
+            this.videoElement.autoplay = false
+        }
 
         this.div.appendChild(this.videoElement)
 
@@ -176,7 +177,9 @@ class ViewerApp implements Component {
         showModal(connectionInfo)
 
         // Set video
-        this.videoElement.srcObject = this.stream.getMediaStream()
+        if(!this.settings?.canvasRenderer) {
+            this.videoElement.srcObject = this.stream.getMediaStream()
+        }
 
         // Start animation frame loop
         this.onTouchUpdate()
@@ -197,6 +200,9 @@ class ViewerApp implements Component {
         } else if (data.type == "videoTrack") {
             if (this.canvasRenderer) {
                 this.canvasRenderer.setVideoTrack(data.track)
+                if(this.stream) {
+                    this.videoElement.srcObject = this.stream.getMediaStream()
+                }
             }
         }
     }
@@ -209,7 +215,16 @@ class ViewerApp implements Component {
     onUserInteraction() {
         this.focusInput()
 
-        this.videoElement.muted = false
+        if (this.videoElement) {
+            this.videoElement.muted = false
+            if(this.videoElement.paused) {
+                this.videoElement.play().then(() => {
+                    // Playing
+                }).catch(error => {
+                    console.error(`Failed to play videoElement: ${error.message || error}`);
+                })
+            }
+        }
     }
     private onScreenKeyboardSetVisible(event: ScreenKeyboardSetVisibleEvent) {
         console.info(event.detail)
