@@ -31,7 +31,7 @@ export function defaultStreamSettings(): StreamSettings {
         packetSize: 256,
         fps: 60,
         videoSampleQueueSize: 6,
-        videoSize: "1080p",
+        videoSize: "custom", // Cannot change dropdownlist in Tesla browser
         videoSizeCustom: {
             width: 1920,
             height: 1080,
