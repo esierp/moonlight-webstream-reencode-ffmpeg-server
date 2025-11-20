@@ -20,16 +20,16 @@
 
 3. Build the Docker image with:
 ```bash
-docker build -t moonlight-web:v1.6 .
+docker build -t moonlight-web:latest .
 ```
 
 4. Run with
 ```bash
-docker run -d -p 8080:8080 -p 40000-40100:40000-40100/udp --name moonlight-web moonlight-web:v1.6
+docker run -d -p 8080:8080 -p 40000-40100:40000-40100/udp --name moonlight-web moonlight-web:latest
 ```
 or
 ```bash
-docker run -d --net=host --name moonlight-web moonlight-web:v1.6
+docker run -d --net=host --name moonlight-web moonlight-web:latest
 ```
 
 # Running with Turn Server
