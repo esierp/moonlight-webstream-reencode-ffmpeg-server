@@ -1,4 +1,4 @@
-import { StreamCapabilities, StreamControllerCapabilities, StreamMouseButton } from "../api_bindings.js"
+import { StreamCapabilities, StreamControllerCapabilities, StreamKeyModifiers, StreamKeys, StreamMouseButton } from "../api_bindings.js"
 import { ByteBuffer, I16_MAX, U16_MAX, U8_MAX } from "./buffer.js"
 import { ControllerConfig, extractGamepadState, GamepadState, SUPPORTED_BUTTONS } from "./gamepad.js"
 import { convertToKey, convertToModifiers } from "./keyboard.js"
@@ -159,31 +159,57 @@ export class StreamInput {
     }
 
     // -- Keyboard
-    onKeyDown(event: KeyboardEvent) {
-        if ("repeat" in event && event.repeat) {
-            // Wolf doesn't like repeating keys
-            return
-        }
+    private pressedKeys: Set<number> = new Set()
 
+    onKeyDown(event: KeyboardEvent) {
         this.sendKeyEvent(true, event)
     }
     onKeyUp(event: KeyboardEvent) {
         this.sendKeyEvent(false, event)
     }
-    private sendKeyEvent(isDown: boolean, event: KeyboardEvent) {
-        this.buffer.reset()
 
+    private sendKeyEvent(isDown: boolean, event: KeyboardEvent) {
         const key = convertToKey(event)
-        if (!key) {
+        if (key == null) {
             return
         }
+
+        if (isDown) {
+            if (this.pressedKeys.has(key)) {
+                return
+            }
+
+            this.pressedKeys.add(key)
+        } else {
+            if (!this.pressedKeys.has(key)) {
+                return
+            }
+
+            this.pressedKeys.delete(key)
+        }
+
         const modifiers = convertToModifiers(event)
 
+        console.log(
+            isDown ? "DOWN" : "UP",
+            event.code,
+            convertToKey(event),
+            convertToModifiers(event).toString(16)
+        )
         this.sendKey(isDown, key, modifiers)
+    }
+
+    raiseAllKeys() {
+        for (const key of this.pressedKeys) {
+            this.sendKey(false, key, 0)
+        }
+        this.pressedKeys.clear()
     }
 
     // Note: key = StreamKeys.VK_, modifiers = StreamKeyModifiers.
     sendKey(isDown: boolean, key: number, modifiers: number) {
+        this.buffer.reset()
+
         this.buffer.putU8(0)
 
         this.buffer.putBool(isDown)

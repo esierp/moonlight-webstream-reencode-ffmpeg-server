@@ -115,7 +115,7 @@ class ViewerApp implements Component {
         this.videoElement.muted = true
 
         // Configure canvas element
-        if(this.settings.canvasRenderer) {
+        if (this.settings.canvasRenderer) {
             this.canvasElement.classList.add("video-stream")
             this.div.appendChild(this.canvasElement)
             this.canvasRenderer = new CanvasRenderer(this.canvasElement)
@@ -127,6 +127,15 @@ class ViewerApp implements Component {
         // Configure input
         this.addListeners(document)
         this.addListeners(document.getElementById("input") as HTMLDivElement)
+
+        window.addEventListener("blur", () => {
+            this.stream?.getInput().raiseAllKeys()
+        })
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState !== "visible") {
+                this.stream?.getInput().raiseAllKeys()
+            }
+        })
 
         document.addEventListener("pointerlockchange", this.onPointerLockChange.bind(this))
         document.addEventListener("fullscreenchange", this.onFullscreenChange.bind(this))
@@ -177,7 +186,7 @@ class ViewerApp implements Component {
         showModal(connectionInfo)
 
         // Set video
-        if(!this.settings?.canvasRenderer) {
+        if (!this.settings?.canvasRenderer) {
             this.videoElement.srcObject = this.stream.getMediaStream()
         }
 
@@ -200,7 +209,7 @@ class ViewerApp implements Component {
         } else if (data.type == "videoTrack") {
             if (this.canvasRenderer) {
                 this.canvasRenderer.setVideoTrack(data.track)
-                if(this.stream) {
+                if (this.stream) {
                     this.videoElement.srcObject = this.stream.getMediaStream()
                 }
             }
@@ -219,7 +228,7 @@ class ViewerApp implements Component {
 
         if (this.videoElement) {
             this.videoElement.muted = false
-            if(this.videoElement.paused) {
+            if (this.videoElement.paused) {
                 this.videoElement.play().then(() => {
                     // Playing
                 }).catch(error => {
@@ -533,7 +542,7 @@ class ViewerApp implements Component {
         const videoSize = this.stream?.getStreamerSize() ?? this.streamerSize
         const videoAspect = videoSize[0] / videoSize[1]
 
-        if(!this.settings?.canvasRenderer) {
+        if (!this.settings?.canvasRenderer) {
             const boundingRect = this.videoElement.getBoundingClientRect()
             const boundingRectAspect = boundingRect.width / boundingRect.height
 
@@ -568,7 +577,7 @@ class ViewerApp implements Component {
         }
         else {
             const clientRect = this.canvasElement.getBoundingClientRect()
-            
+
             const canvasCssWidth = this.canvasElement.clientWidth
             const canvasCssHeight = this.canvasElement.clientHeight
 
