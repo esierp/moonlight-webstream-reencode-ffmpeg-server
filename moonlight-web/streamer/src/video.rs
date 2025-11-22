@@ -108,90 +108,115 @@ fn video_thread(
     let mut sender: TrackLocalSender<SequencedTrackLocalStaticRTP> =
         TrackLocalSender::new(stream.clone(), frame_queue_size);
     let needs_idr = Arc::new(AtomicBool::new(false));
-    let mut clock_rate = 0;
     let mut video_codec = None;
 
-    manager.wait_for_setup(|VideoSetup{format, width, height, redraw_rate, flags: _}| {
-        info!("[Stream] Stream setup: {width}x{height}x{redraw_rate} and {format:?}");
+    let VideoSetup {
+        format,
+        width,
+        height,
+        redraw_rate,
+        flags: _,
+    } = manager
+        .wait_for_setup()
+        .expect("failed to setup video renderer");
 
+    info!("[Stream] Stream setup: {width}x{height}x{redraw_rate} and {format:?}");
+
+    {
+        let mut video_size = stream.video_size.blocking_lock();
+
+        *video_size = (width, height);
+    }
+
+    if !format.contained_in(supported_formats) {
+        error!(
+            "tried to setup a video stream with a non supported video format: {format:?}, supported formats: {:?}",
+            supported_formats.iter_names().collect::<Vec<_>>()
+        );
+
+        manager
+            .send_setup_result(-1)
+            .expect("failed to send video setup result");
+        return;
+    }
+
+    let Some(codec) = video_format_to_codec(format) else {
+        error!("Failed to get video codec with format {format:?}");
+
+        manager
+            .send_setup_result(-1)
+            .expect("failed to send video setup result");
+        return;
+    };
+
+    let clock_rate = codec.capability.clock_rate;
+
+    if let Err(err) = sender.blocking_create_track(
+        TrackLocalStaticRTP::new(
+            codec.capability.clone(),
+            "video".to_string(),
+            "moonlight".to_string(),
+        )
+        .into(),
         {
-            let mut video_size = stream.video_size.blocking_lock();
+            let needs_idr = needs_idr.clone();
 
-            *video_size = (width, height);
-        }
-
-        if !format.contained_in(supported_formats) {
-            error!(
-                "tried to setup a video stream with a non supported video format: {format:?}, supported formats: {:?}",
-                supported_formats.iter_names().collect::<Vec<_>>()
-            );
-            return -1;
-        }
-
-        let Some(codec) = video_format_to_codec(format) else {
-            error!("Failed to get video codec with format {format:?}");
-            return -1;
-        };
-
-        clock_rate = codec.capability.clock_rate;
-
-        let needs_idr = needs_idr.clone();
-        if let Err(err) = sender.blocking_create_track(
-            TrackLocalStaticRTP::new(
-                codec.capability.clone(),
-                "video".to_string(),
-                "moonlight".to_string(),
-            )
-            .into(),
             move |packet| {
                 let packet = packet.as_any();
 
                 if packet.is::<PictureLossIndication>() {
                     needs_idr.store(true, Ordering::Release);
                 }
-                if let Some(_max_bitrate) = packet.downcast_ref::<ReceiverEstimatedMaximumBitrate>() {
+                if let Some(_max_bitrate) = packet.downcast_ref::<ReceiverEstimatedMaximumBitrate>()
+                {
                     // Moonlight doesn't support dynamic bitrate changing :(
                 }
-            },
-        ) {
-            error!(
-                "Failed to create video track with format {format:?} and codec \"{codec:?}\": {err:?}"
-            );
-            return -1;
-        }
+            }
+        },
+    ) {
+        error!(
+            "Failed to create video track with format {format:?} and codec \"{codec:?}\": {err:?}"
+        );
 
-        match format {
-            // -- H264
-            VideoFormat::H264 | VideoFormat::H264High8_444 => {
-                video_codec = Some(VideoCodec::H264 {
-                    nal_reader: H264Reader::new(Cursor::new(Vec::new()), 0),
-                    payloader: Default::default(),
-                });
-            }
-            // -- H265
-            VideoFormat::H265
-            | VideoFormat::H265Main10
-            | VideoFormat::H265Rext8_444
-            | VideoFormat::H265Rext10_444 => {
-                video_codec = Some(VideoCodec::H265 {
-                    nal_reader: H265Reader::new(Cursor::new(Vec::new()), 0),
-                    payloader: Default::default(),
-                });
-            }
-            // -- AV1
-            VideoFormat::Av1Main8
-            | VideoFormat::Av1Main10
-            | VideoFormat::Av1High8_444
-            | VideoFormat::Av1High10_444 => {
-                video_codec = Some(VideoCodec::Av1 {
-                    annex_b: AnnexBSplitter::new(Cursor::new(Vec::new()), 0),
-                    payloader: Default::default(),
-                });
-            }
-        }
+        manager
+            .send_setup_result(-1)
+            .expect("failed to send video setup result");
+        return;
+    }
 
-        0
-    }).expect("failed to setup video renderer");
+    match format {
+        // -- H264
+        VideoFormat::H264 | VideoFormat::H264High8_444 => {
+            video_codec = Some(VideoCodec::H264 {
+                nal_reader: H264Reader::new(Cursor::new(Vec::new()), 0),
+                payloader: Default::default(),
+            });
+        }
+        // -- H265
+        VideoFormat::H265
+        | VideoFormat::H265Main10
+        | VideoFormat::H265Rext8_444
+        | VideoFormat::H265Rext10_444 => {
+            video_codec = Some(VideoCodec::H265 {
+                nal_reader: H265Reader::new(Cursor::new(Vec::new()), 0),
+                payloader: Default::default(),
+            });
+        }
+        // -- AV1
+        VideoFormat::Av1Main8
+        | VideoFormat::Av1Main10
+        | VideoFormat::Av1High8_444
+        | VideoFormat::Av1High10_444 => {
+            video_codec = Some(VideoCodec::Av1 {
+                annex_b: AnnexBSplitter::new(Cursor::new(Vec::new()), 0),
+                payloader: Default::default(),
+            });
+        }
+    }
+
+    manager
+        .send_setup_result(0)
+        .expect("failed to send video setup result");
 
     let mut samples = Vec::new();
 

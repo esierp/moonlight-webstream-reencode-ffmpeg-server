@@ -202,7 +202,7 @@ pub(crate) unsafe fn raw_callbacks() -> _DECODER_RENDERER_CALLBACKS {
 
 pub struct PullVideoDecoder {
     setup_sender: Sender<VideoSetup>,
-    setup_success_receiver: Receiver<i32>,
+    setup_code_receiver: Receiver<i32>,
     active: Arc<AtomicBool>,
     supported_formats: SupportedVideoFormats,
 }
@@ -215,7 +215,7 @@ impl VideoDecoder for PullVideoDecoder {
             return ML_PULL_RENDERER_ERROR;
         }
 
-        match self.setup_success_receiver.recv() {
+        match self.setup_code_receiver.recv() {
             Ok(value) => value,
             Err(_) => ML_PULL_RENDERER_ERROR,
         }
@@ -250,12 +250,14 @@ pub enum VideoPullResult {
     NotActive,
     #[error("cannot finish the video renderer setup")]
     CannotFinishSetup,
+    #[error("the setup success was already sent")]
+    SetupSuccessAlreadySent,
 }
 
 pub struct PullVideoManager {
     setup_receiver: Receiver<VideoSetup>,
     setup: Option<VideoSetup>,
-    setup_success_sender: Sender<i32>,
+    setup_code_sender: Option<Sender<i32>>,
     active: Arc<AtomicBool>,
     buffers: Vec<VideoDataBuffer<'static>>,
 }
@@ -265,20 +267,20 @@ impl PullVideoManager {
         let active = Arc::new(AtomicBool::new(false));
 
         let (setup_sender, setup_receiver) = channel();
-        let (setup_success_sender, setup_success_receiver) = channel();
+        let (setup_code_sender, setup_code_receiver) = channel();
 
         (
             PullVideoDecoder {
                 active: active.clone(),
                 setup_sender,
-                setup_success_receiver,
+                setup_code_receiver,
                 supported_formats,
             },
             PullVideoManager {
                 active,
                 setup_receiver,
                 setup: None,
-                setup_success_sender,
+                setup_code_sender: Some(setup_code_sender),
                 buffers: Vec::new(),
             },
         )
@@ -292,51 +294,11 @@ impl PullVideoManager {
         }
     }
 
-    /// Note: the send_success will only be executed one time after the setup is called
-    pub fn poll_setup(
-        &mut self,
-        send_success: impl FnOnce(VideoSetup) -> i32,
-    ) -> Result<VideoSetup, VideoPullResult> {
+    /// Note: Send setup result must be called after a successful pull
+    pub fn poll_setup(&mut self) -> Result<VideoSetup, VideoPullResult> {
         match self.setup_receiver.try_recv() {
             Ok(setup) => {
                 self.setup = Some(setup);
-
-                if let Err(err) = self.setup_success_sender.send(send_success(setup)) {
-                    debug!("failed to send video setup success: {err}");
-                    return Err(VideoPullResult::CannotFinishSetup);
-                }
-
-                // Fallthrough
-            }
-            Err(err) => {
-                debug!("failed to receive video setup: {err}");
-                return Err(VideoPullResult::NotActive);
-            }
-        }
-
-        if let Some(setup) = self.setup.as_ref() {
-            return Ok(*setup);
-        }
-
-        Err(VideoPullResult::ValueNotPresent)
-    }
-    /// Note: the send_success will only be executed one time after the setup is called
-    pub fn wait_for_setup(
-        &mut self,
-        send_success: impl FnOnce(VideoSetup) -> i32,
-    ) -> Result<VideoSetup, VideoPullResult> {
-        if let Some(setup) = self.setup.as_ref() {
-            return Ok(*setup);
-        }
-
-        match self.setup_receiver.recv() {
-            Ok(setup) => {
-                self.setup = Some(setup);
-
-                if let Err(err) = self.setup_success_sender.send(send_success(setup)) {
-                    debug!("failed to send video setup success: {err}");
-                    return Err(VideoPullResult::CannotFinishSetup);
-                }
 
                 Ok(setup)
             }
@@ -345,6 +307,39 @@ impl PullVideoManager {
                 Err(VideoPullResult::NotActive)
             }
         }
+    }
+    /// Note: Send setup result must be called after this
+    pub fn wait_for_setup(&mut self) -> Result<VideoSetup, VideoPullResult> {
+        if let Some(setup) = self.setup.as_ref() {
+            return Ok(*setup);
+        }
+
+        match self.setup_receiver.recv() {
+            Ok(setup) => {
+                self.setup = Some(setup);
+
+                Ok(setup)
+            }
+            Err(err) => {
+                debug!("failed to receive video setup: {err}");
+                Err(VideoPullResult::NotActive)
+            }
+        }
+    }
+
+    pub fn send_setup_result(&mut self, code: i32) -> Result<(), VideoPullResult> {
+        let Some(setup_code_sender) = self.setup_code_sender.take() else {
+            return Err(VideoPullResult::SetupSuccessAlreadySent);
+        };
+
+        if let Err(err) = setup_code_sender.send(code) {
+            self.setup_code_sender = Some(setup_code_sender);
+
+            debug!("failed to send video setup success: {err}");
+            return Err(VideoPullResult::CannotFinishSetup);
+        }
+
+        Ok(())
     }
 
     pub fn poll_next_video_frame<'a>(
