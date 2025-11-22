@@ -49,7 +49,8 @@ export function defaultStreamInputConfig(): StreamInputConfig {
         touchMode: "pointAndDrag",
         controllerConfig: {
             invertAB: false,
-            invertXY: false
+            invertXY: false,
+            sendIntervalOverride: null
         }
     }
 }
@@ -718,7 +719,17 @@ export class StreamInput {
             this.gamepads[index] = null
         }
     }
+
+    private lastGamepadUpdate: number = performance.now()
     onGamepadUpdate() {
+        if (this.config.controllerConfig.sendIntervalOverride != null) {
+            const now = performance.now()
+            if (now - this.lastGamepadUpdate < (1000 / this.config.controllerConfig.sendIntervalOverride)) {
+                return
+            }
+            this.lastGamepadUpdate = performance.now()
+        }
+
         for (let gamepadId = 0; gamepadId < this.gamepads.length; gamepadId++) {
             const gamepadIndex = this.gamepads[gamepadId]
             if (gamepadIndex == null) {
@@ -903,7 +914,7 @@ export class StreamInput {
     private tryOpenControllerChannel(id: number) {
         if (!this.controllerInputs[id]) {
             this.controllerInputs[id] = this.peer?.createDataChannel(`controller${id}`, {
-                maxRetransmits: 0,
+                maxRetransmits: 3,
                 ordered: true,
             }) ?? null
         }

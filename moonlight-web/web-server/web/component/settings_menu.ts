@@ -45,7 +45,8 @@ export function defaultStreamSettings(): StreamSettings {
         mouseScrollMode: "highres",
         controllerConfig: {
             invertAB: false,
-            invertXY: false
+            invertXY: false,
+            sendIntervalOverride: null,
         },
         toggleFullscreenWithKeybind: false
     }
@@ -104,6 +105,7 @@ export class StreamSettingsComponent implements Component {
     private controllerHeader: HTMLHeadingElement = document.createElement("h2")
     private controllerInvertAB: InputComponent
     private controllerInvertXY: InputComponent
+    private controllerSendIntervalOverride: InputComponent
 
     private otherHeader: HTMLHeadingElement = document.createElement("h2")
     private toggleFullscreenWithKeybind: InputComponent
@@ -277,6 +279,20 @@ export class StreamSettingsComponent implements Component {
         this.controllerInvertXY.addChangeListener(this.onSettingsChange.bind(this))
         this.controllerInvertXY.mount(this.divElement)
 
+        // Controller Send Interval
+        this.controllerSendIntervalOverride = new InputComponent("controllerSendIntervalOverride", "number", "Override Controller State Send Interval", {
+            hasEnableCheckbox: true,
+            defaultValue: "20",
+            value: settings?.controllerConfig.sendIntervalOverride?.toString(),
+            numberSlider: {
+                range_min: 10,
+                range_max: 120
+            }
+        })
+        this.controllerSendIntervalOverride.setEnabled(settings?.controllerConfig.sendIntervalOverride != null)
+        this.controllerSendIntervalOverride.addChangeListener(this.onSettingsChange.bind(this))
+        this.controllerSendIntervalOverride.mount(this.divElement)
+
         if (!window.isSecureContext) {
             this.controllerInvertAB.setEnabled(false)
             this.controllerInvertXY.setEnabled(false)
@@ -337,6 +353,11 @@ export class StreamSettingsComponent implements Component {
 
         settings.controllerConfig.invertAB = this.controllerInvertAB.isChecked()
         settings.controllerConfig.invertXY = this.controllerInvertXY.isChecked()
+        if (this.controllerSendIntervalOverride.isEnabled()) {
+            settings.controllerConfig.sendIntervalOverride = parseInt(this.controllerSendIntervalOverride.getValue())
+        } else {
+            settings.controllerConfig.sendIntervalOverride = null
+        }
 
         settings.toggleFullscreenWithKeybind = this.toggleFullscreenWithKeybind.isChecked()
 

@@ -3,6 +3,7 @@ import { StreamControllerButton } from "../api_bindings.js"
 export type ControllerConfig = {
     invertXY: boolean
     invertAB: boolean
+    sendIntervalOverride: number | null
 }
 
 // https://w3c.github.io/gamepad/#remapping
