@@ -23,14 +23,26 @@ async function startApp() {
         return;
     }
 
+    let lastAppState: AppState | null = null
+    if (sessionStorage) {
+        const lastStateText = sessionStorage.getItem("mlState")
+        if (lastStateText) {
+            lastAppState = JSON.parse(lastStateText)
+        }
+    }
+
     const app = new MainApp(api)
     app.mount(rootElement)
-
-    app.forceFetch()
 
     window.addEventListener("popstate", event => {
         app.setAppState(event.state, false)
     })
+
+    app.forceFetch()
+
+    if (lastAppState) {
+        app.setAppState(lastAppState)
+    }
 }
 
 startApp()
@@ -40,6 +52,10 @@ type DisplayStates = "hosts" | "games" | "settings"
 type AppState = { display: DisplayStates, hostId?: number }
 function pushAppState(state: AppState) {
     history.pushState(state, "")
+
+    if (sessionStorage) {
+        sessionStorage.setItem("mlState", JSON.stringify(state))
+    }
 }
 function backAppState() {
     history.back()
