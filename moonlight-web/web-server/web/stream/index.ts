@@ -12,7 +12,7 @@ export type InfoEvent = CustomEvent<
     { type: "connectionComplete", capabilities: StreamCapabilities } |
     { type: "connectionStatus", status: ConnectionStatus } |
     { type: "connectionTerminated", errorCode: number } |
-    { type: "addDebugLine", line: string } |
+    { type: "addDebugLine", line: string, fatal: boolean } |
     { type: "videoTrack", track: MediaStreamTrack }
 >
 export type InfoEventListener = (event: InfoEvent) => void
@@ -126,10 +126,10 @@ export class Stream {
         })
     }
 
-    private debugLog(message: string) {
+    private debugLog(message: string, fatal?: boolean) {
         for (const line of message.split("\n")) {
             const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "addDebugLine", line }
+                detail: { type: "addDebugLine", line, fatal: fatal ?? false }
             })
 
             this.eventTarget.dispatchEvent(event)
@@ -459,7 +459,7 @@ export class Stream {
         }
     }
     private onWsClose() {
-        this.debugLog(`Web Socket Closed`)
+        this.debugLog(`Web Socket Closed`, true)
     }
 
     private sendWsMessage(message: StreamClientMessage) {
