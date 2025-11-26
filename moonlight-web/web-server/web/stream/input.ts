@@ -897,6 +897,15 @@ export class StreamInput {
     // - Trigger: range 0..1
     // - Stick: range -1..1
     sendController(id: number, state: GamepadState) {
+        const PACKET_SIZE_BYTES = 1 + 4 + 1 + 1 + 2 + 2 + 2 + 2;
+
+        const controllerChannel = this.controllerInputs[id]
+        if (controllerChannel && controllerChannel.bufferedAmount > PACKET_SIZE_BYTES * 2) {
+            // Only send packets when we can handle them
+            console.debug(`dropping controller packet for ${id} because the buffer amount is large enough: ${controllerChannel.bufferedAmount}`)
+            return
+        }
+
         this.buffer.reset()
 
         this.buffer.putU8(0)
@@ -914,7 +923,7 @@ export class StreamInput {
     private tryOpenControllerChannel(id: number) {
         if (!this.controllerInputs[id]) {
             this.controllerInputs[id] = this.peer?.createDataChannel(`controller${id}`, {
-                maxRetransmits: 3,
+                maxRetransmits: 0,
                 ordered: true,
             }) ?? null
         }
