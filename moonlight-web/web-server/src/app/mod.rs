@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use actix_web::{HttpResponse, ResponseError, cookie::Cookie, http::StatusCode, web::Bytes};
+use actix_web::{ResponseError, http::StatusCode, web::Bytes};
 use common::config::Config;
 use hex::FromHexError;
 use log::{error, warn};
@@ -19,15 +19,12 @@ use openssl::error::ErrorStack;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
-use crate::{
-    api::auth::COOKIE_SESSION_TOKEN_NAME,
-    app::{
-        auth::{SessionToken, UserAuth},
-        host::{AppId, HostId},
-        password::StoragePassword,
-        storage::{Either, Storage, StorageHostModify, StorageUserAdd, create_storage},
-        user::{Admin, AuthenticatedUser, Role, User, UserId},
-    },
+use crate::app::{
+    auth::{SessionToken, UserAuth},
+    host::{AppId, HostId},
+    password::StoragePassword,
+    storage::{Either, Storage, StorageHostModify, StorageUserAdd, create_storage},
+    user::{Admin, AuthenticatedUser, Role, User, UserId},
 };
 
 pub mod auth;

@@ -252,6 +252,14 @@ input[type=number] {
     background-color: rgba(255, 255, 255, 0.2);
 }
 
+.context-menu-element-red {
+    background-color: #7d0e0e;
+}
+
+.context-menu-element-red:hover {
+    background-color: #a43535;
+}
+
 .context-menu-disabled {
     visibility: hidden;
     /** animation */

@@ -7,6 +7,7 @@ document.addEventListener("click", () => removeContextMenu())
 export type ContextMenuElement = {
     name: string,
     callback(event: MouseEvent): void
+    classes?: string[]
 }
 
 export type ContextMenuInit = {
@@ -59,6 +60,10 @@ class ContextMenuElementComponent implements Component {
         this.nameElement.addEventListener("click", event => {
             element.callback(event)
         })
+
+        if (element.classes) {
+            this.nameElement.classList.add(...element.classes)
+        }
     }
 
     mount(parent: Element): void {

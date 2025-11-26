@@ -3,7 +3,7 @@ use actix_web::{
     dev::HttpServiceFactory,
     get,
     middleware::from_fn,
-    post, services,
+    patch, post, services,
     web::{self, Bytes, Data, Json, Query},
 };
 use futures::future::try_join_all;
@@ -20,14 +20,15 @@ use crate::{
     app::{
         App, AppError,
         host::{AppId, HostId},
-        user::{AuthenticatedUser, UserId},
+        storage::StorageHostModify,
+        user::{AuthenticatedUser, Role, UserId},
     },
 };
 use common::api_bindings::{
     self, DeleteHostQuery, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse,
-    GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, PostPairRequest,
-    PostPairResponse1, PostPairResponse2, PostWakeUpRequest, PutHostRequest, PutHostResponse,
-    UndetailedHost,
+    GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, PatchHostRequest,
+    PostHostRequest, PostHostResponse, PostPairRequest, PostPairResponse1, PostPairResponse2,
+    PostWakeUpRequest, UndetailedHost,
 };
 
 pub mod admin;
@@ -135,20 +136,48 @@ async fn get_host(
 async fn post_host(
     app: Data<App>,
     mut user: AuthenticatedUser,
-    Json(query): Json<PutHostRequest>,
-) -> Result<Json<PutHostResponse>, AppError> {
+    Json(request): Json<PostHostRequest>,
+) -> Result<Json<PostHostResponse>, AppError> {
     let mut host = user
         .host_add(
-            query.address,
-            query
+            request.address,
+            request
                 .http_port
                 .unwrap_or(app.config().moonlight.default_http_port),
         )
         .await?;
 
-    Ok(Json(PutHostResponse {
+    Ok(Json(PostHostResponse {
         host: host.detailed_host(&mut user).await?,
     }))
+}
+
+#[patch("/host")]
+async fn patch_host(
+    mut user: AuthenticatedUser,
+    Json(request): Json<PatchHostRequest>,
+) -> Result<HttpResponse, AppError> {
+    let host_id = HostId(request.host_id);
+
+    let mut host = user.host(host_id).await?;
+
+    let mut modify = StorageHostModify::default();
+
+    let role = user.role().await?;
+    if request.change_owner {
+        match role {
+            Role::Admin => {
+                modify.owner = Some(request.owner.map(UserId));
+            }
+            Role::User => {
+                return Err(AppError::Forbidden);
+            }
+        }
+    }
+
+    host.modify(&mut user, modify).await?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[delete("/host")]
@@ -275,6 +304,7 @@ pub fn api_service() -> impl HttpServiceFactory {
             list_hosts,
             get_host,
             post_host,
+            patch_host,
             wake_host,
             delete_host,
             pair_host,

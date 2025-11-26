@@ -1,4 +1,4 @@
-import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse, GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, GetUsersResponse, PatchUserRequest, PostCancelRequest, PostCancelResponse, PostLoginRequest, PostPairRequest, PostPairResponse1, PostPairResponse2, PostUserRequest, PostWakeUpRequest, PutHostRequest, PutHostResponse, UndetailedHost } from "./api_bindings.js";
+import { App, DeleteHostQuery, DeleteUserRequest, DetailedHost, DetailedUser, GetAppImageQuery, GetAppsQuery, GetAppsResponse, GetHostQuery, GetHostResponse, GetHostsResponse, GetUserQuery, GetUsersResponse, PatchUserRequest, PostCancelRequest, PostCancelResponse, PostLoginRequest, PostPairRequest, PostPairResponse1, PostPairResponse2, PostUserRequest, PostWakeUpRequest, PostHostRequest, PostHostResponse, UndetailedHost, PatchHostRequest } from "./api_bindings.js";
 import { showErrorPopup } from "./component/error.js";
 import { showMessage, showModal } from "./component/modal/index.js";
 import { ApiUserPasswordPrompt } from "./component/modal/login.js";
@@ -340,10 +340,16 @@ export async function apiGetHost(api: Api, query: GetHostQuery): Promise<Detaile
 
     return (response as GetHostResponse).host
 }
-export async function apiPostHost(api: Api, data: PutHostRequest): Promise<DetailedHost> {
+export async function apiPostHost(api: Api, data: PostHostRequest): Promise<DetailedHost> {
     const response = await fetchApi(api, "/host", "post", { json: data })
 
-    return (response as PutHostResponse).host
+    return (response as PostHostResponse).host
+}
+export async function apiPatchHost(api: Api, data: PatchHostRequest): Promise<void> {
+    await fetchApi(api, "/host", PATCH, {
+        json: data,
+        response: "ignore"
+    })
 }
 export async function apiDeleteHost(api: Api, query: DeleteHostQuery): Promise<void> {
     await fetchApi(api, "/host", "delete", { query, response: "ignore" })

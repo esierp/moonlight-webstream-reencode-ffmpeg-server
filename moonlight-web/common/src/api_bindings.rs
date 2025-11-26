@@ -136,15 +136,25 @@ pub struct GetHostResponse {
 
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export, export_to = EXPORT_PATH)]
-pub struct PutHostRequest {
+pub struct PostHostRequest {
     pub address: String,
     pub http_port: Option<u16>,
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export, export_to = EXPORT_PATH)]
-pub struct PutHostResponse {
+pub struct PostHostResponse {
     pub host: DetailedHost,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct PatchHostRequest {
+    /// The host id of the host to change
+    pub host_id: u32,
+    /// Option<Option<u32>> are not supported
+    pub change_owner: bool,
+    pub owner: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, TS)]

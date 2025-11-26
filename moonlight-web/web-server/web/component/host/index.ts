@@ -1,5 +1,5 @@
-import { DetailedHost, DetailedUser, UndetailedHost } from "../../api_bindings.js"
-import { Api, apiDeleteHost, apiGetHost, isDetailedHost, apiPostPair, apiWakeUp, apiGetUser } from "../../api.js"
+import { DetailedHost, DetailedUser, PatchHostRequest, UndetailedHost } from "../../api_bindings.js"
+import { Api, apiDeleteHost, apiGetHost, isDetailedHost, apiPostPair, apiWakeUp, apiGetUser, apiPatchHost } from "../../api.js"
 import { Component, ComponentEvent } from "../index.js"
 import { setContextMenu } from "../context_menu.js"
 import { showErrorPopup } from "../error.js"
@@ -112,7 +112,22 @@ export class Host implements Component {
             })
         }
 
-        // TODO: if self is admin show a make global host and add api points
+        // Make private / global
+        if (this.userCache?.role == "Admin") {
+            if (this.cache?.owner == "Global") {
+                elements.push({
+                    name: "Make Private",
+                    callback: this.makePrivate.bind(this),
+                    classes: ["context-menu-element-red"]
+                })
+            } else if (this.cache?.owner == "ThisUser") {
+                elements.push({
+                    name: "Make Global",
+                    callback: this.makeGlobal.bind(this),
+                    classes: ["context-menu-element-red"]
+                })
+            }
+        }
 
         if (this.cache?.owner == "ThisUser" || this.userCache?.role == "Admin") {
             elements.push({
@@ -171,6 +186,31 @@ export class Host implements Component {
     }
     removeHostOpenListener(listener: HostEventListener, options?: EventListenerOptions) {
         this.divElement.removeEventListener("ml-hostopen", listener as any, options)
+    }
+
+    private async makeGlobal() {
+        await apiPatchHost(this.api, {
+            host_id: this.hostId,
+            change_owner: true,
+            owner: null,
+        })
+
+        if (this.cache) {
+            this.cache.owner = "Global"
+        }
+    }
+    private async makePrivate() {
+        const user = this.userCache ?? await apiGetUser(this.api)
+
+        await apiPatchHost(this.api, {
+            host_id: this.hostId,
+            change_owner: true,
+            owner: user.id,
+        })
+
+        if (this.cache) {
+            this.cache.owner = "ThisUser"
+        }
     }
 
     private async remove() {
