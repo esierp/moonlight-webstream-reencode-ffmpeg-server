@@ -38,8 +38,7 @@ pub async fn create_storage(
 pub struct StorageUser {
     pub id: UserId,
     pub name: String,
-    // TODO: password might be null if we initialized it via the forwarded headers?
-    pub password: StoragePassword,
+    pub password: Option<StoragePassword>,
     pub role: Role,
     pub client_unique_id: String,
 }
@@ -47,13 +46,13 @@ pub struct StorageUser {
 pub struct StorageUserAdd {
     pub role: Role,
     pub name: String,
-    pub password: StoragePassword,
+    pub password: Option<StoragePassword>,
     pub client_unique_id: String,
 }
 #[derive(Default, Clone)]
 pub struct StorageUserModify {
     pub role: Option<Role>,
-    pub password: Option<StoragePassword>,
+    pub password: Option<Option<StoragePassword>>,
     pub client_unique_id: Option<String>,
 }
 

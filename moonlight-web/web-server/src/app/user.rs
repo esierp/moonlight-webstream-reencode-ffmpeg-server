@@ -142,7 +142,9 @@ impl User {
                     return Err(AppError::Unauthorized);
                 }
 
-                if storage.password.verify(password)? {
+                if let Some(storage_password) = storage.password
+                    && storage_password.verify(password)?
+                {
                     Ok(AuthenticatedUser { inner: self })
                 } else {
                     Err(AppError::CredentialsWrong)
@@ -160,6 +162,20 @@ impl User {
                 self.cache_storage = self.cache_storage.or(user);
 
                 Ok(AuthenticatedUser { inner: self })
+            }
+            UserAuth::ForwardedHeaders { username } => {
+                let app = self.app.access()?;
+
+                if app.config.web_server.forwarded_header.is_none() {
+                    return Err(AppError::HeaderAuthDisabled);
+                }
+
+                let storage = self.storage_user().await?;
+                if storage.name.as_str() == username.as_str() {
+                    Ok(AuthenticatedUser { inner: self })
+                } else {
+                    Err(AppError::Forbidden)
+                }
             }
             _ => Err(AppError::Unauthorized),
         }
@@ -204,7 +220,7 @@ impl AuthenticatedUser {
             .modify_user(
                 self.id,
                 StorageUserModify {
-                    password: Some(password),
+                    password: Some(Some(password)),
                     ..Default::default()
                 },
             )

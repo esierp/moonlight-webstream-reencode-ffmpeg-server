@@ -60,12 +60,16 @@ pub enum AppError {
     SessionTokenNotFound,
     #[error("the action is not allowed because the user is not authorized, 401")]
     Unauthorized,
+    #[error("using a custom header for authorization is disabled")]
+    HeaderAuthDisabled,
     // --
     #[error("the action is not allowed with the current privileges, 403")]
     Forbidden,
     // -- Bad Request
     #[error("the authorization header is not a bearer")]
     AuthorizationNotBearer,
+    #[error("the custom header used to authorize is malformed")]
+    HeaderAuthMalformed,
     #[error("the authorization header is not a bearer")]
     BearerMalformed,
     #[error("the password is empty")]
@@ -104,8 +108,10 @@ impl ResponseError for AppError {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::OpenSSL(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::HeaderAuthDisabled => StatusCode::UNAUTHORIZED,
             Self::Hex(_) => StatusCode::BAD_REQUEST,
             Self::AuthorizationNotBearer => StatusCode::BAD_REQUEST,
+            Self::HeaderAuthMalformed => StatusCode::BAD_REQUEST,
             Self::BearerMalformed => StatusCode::BAD_REQUEST,
             Self::PasswordEmpty => StatusCode::BAD_REQUEST,
             Self::NameEmpty => StatusCode::BAD_REQUEST,
@@ -183,7 +189,7 @@ impl App {
         let mut user = self
             .add_user_no_auth(StorageUserAdd {
                 name: username.clone(),
-                password: StoragePassword::new(&password)?,
+                password: Some(StoragePassword::new(&password)?),
                 role: Role::Admin,
                 client_unique_id: username,
             })
@@ -272,10 +278,35 @@ impl App {
 
                 Ok(user)
             }
-            UserAuth::ForwardedHeaders { username } => {
-                let _ = username;
-                // TODO: look if config enabled so we can trust or not
-                todo!()
+            UserAuth::ForwardedHeaders { ref username } => {
+                let user = match self.user_by_name(username).await {
+                    Ok(user) => user,
+                    Err(AppError::UserNotFound) => {
+                        let Some(config_forwarded_headers) =
+                            &self.config().web_server.forwarded_header
+                        else {
+                            return Err(AppError::Unauthorized);
+                        };
+
+                        if !config_forwarded_headers.auto_create_missing_user {
+                            return Err(AppError::Unauthorized);
+                        }
+
+                        let user = self
+                            .add_user_no_auth(StorageUserAdd {
+                                role: Role::User,
+                                name: username.clone(),
+                                password: None,
+                                client_unique_id: username.clone(),
+                            })
+                            .await?;
+
+                        return Ok(user);
+                    }
+                    Err(err) => return Err(err),
+                };
+
+                user.authenticate(&auth).await
             }
         }
     }

@@ -221,10 +221,10 @@ fn user_from_json(user_id: UserId, user: &V2User) -> StorageUser {
     StorageUser {
         id: user_id,
         name: user.name.clone(),
-        password: StoragePassword {
-            salt: user.password.salt,
-            hash: user.password.hash,
-        },
+        password: user.password.as_ref().map(|password| StoragePassword {
+            salt: password.salt,
+            hash: password.hash,
+        }),
         role: user.role,
         client_unique_id: user.client_unique_id.clone(),
     }
@@ -254,10 +254,10 @@ impl Storage for JsonStorage {
         let user = V2User {
             role: user.role,
             name: user.name,
-            password: V2UserPassword {
-                salt: user.password.salt,
-                hash: user.password.hash,
-            },
+            password: user.password.map(|password| V2UserPassword {
+                salt: password.salt,
+                hash: password.hash,
+            }),
             client_unique_id: user.client_unique_id,
         };
 
@@ -292,10 +292,10 @@ impl Storage for JsonStorage {
         Ok(StorageUser {
             id: UserId(id),
             name: user.name,
-            password: StoragePassword {
-                salt: user.password.salt,
-                hash: user.password.hash,
-            },
+            password: user.password.map(|password| StoragePassword {
+                salt: password.salt,
+                hash: password.hash,
+            }),
             role: user.role,
             client_unique_id: user.client_unique_id,
         })
@@ -311,10 +311,10 @@ impl Storage for JsonStorage {
         let mut user = user_lock.write().await;
 
         if let Some(password) = modify.password {
-            user.password = V2UserPassword {
+            user.password = password.map(|password| V2UserPassword {
                 salt: password.salt,
                 hash: password.hash,
-            };
+            });
         }
         if let Some(role) = modify.role {
             user.role = role;

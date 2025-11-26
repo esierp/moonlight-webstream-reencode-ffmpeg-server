@@ -26,7 +26,7 @@ pub async fn add_user(
             &admin,
             StorageUserAdd {
                 name: request.name.clone(),
-                password: StoragePassword::new(&request.password)?,
+                password: Some(StoragePassword::new(&request.password)?),
                 role: request.role.into(),
                 client_unique_id: request.client_unique_id,
             },
@@ -60,7 +60,7 @@ pub async fn patch_user(
                 .modify(
                     &admin,
                     StorageUserModify {
-                        password: new_password,
+                        password: Some(new_password),
                         role: request.role.map(Role::from),
                         client_unique_id: request.client_unique_id,
                     },

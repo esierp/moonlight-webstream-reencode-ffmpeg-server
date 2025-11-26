@@ -30,9 +30,22 @@ impl FromRequest for UserAuth {
     }
 }
 fn extract_user_auth(req: &HttpRequest) -> Result<UserAuth, AppError> {
-    // TODO: look for forwarded headers
+    let app = match req.app_data::<Data<App>>() {
+        None => return Err(AppError::AppDestroyed),
+        Some(value) => value,
+    };
 
-    if let Some(bearer) = req.headers().get("Authorization") {
+    if let Some(header_auth) = &app.config().web_server.forwarded_header
+        && let Some(username) = req.headers().get(&header_auth.username_header)
+    {
+        let Ok(username) = username.to_str() else {
+            return Err(AppError::HeaderAuthMalformed);
+        };
+
+        Ok(UserAuth::ForwardedHeaders {
+            username: username.to_string(),
+        })
+    } else if let Some(bearer) = req.headers().get("Authorization") {
         // Look for bearer
         let Ok(bearer) = bearer.to_str() else {
             return Err(AppError::BearerMalformed);

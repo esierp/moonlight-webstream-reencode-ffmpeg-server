@@ -900,7 +900,7 @@ export class StreamInput {
         const PACKET_SIZE_BYTES = 1 + 4 + 1 + 1 + 2 + 2 + 2 + 2;
 
         const controllerChannel = this.controllerInputs[id]
-        if (controllerChannel && controllerChannel.bufferedAmount > PACKET_SIZE_BYTES * 2) {
+        if (controllerChannel && controllerChannel.bufferedAmount > PACKET_SIZE_BYTES) {
             // Only send packets when we can handle them
             console.debug(`dropping controller packet for ${id} because the buffer amount is large enough: ${controllerChannel.bufferedAmount}`)
             return

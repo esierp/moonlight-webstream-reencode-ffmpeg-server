@@ -175,6 +175,7 @@ pub struct WebServerConfig {
     pub first_login_create_admin: bool,
     pub first_login_assign_global_hosts: bool,
     pub default_user_id: Option<u32>,
+    pub forwarded_header: Option<ForwardedHeaders>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,6 +195,7 @@ impl Default for WebServerConfig {
             first_login_create_admin: true,
             first_login_assign_global_hosts: true,
             default_user_id: None,
+            forwarded_header: None,
         }
     }
 }
@@ -208,6 +210,17 @@ fn default_session_cookie_expiration() -> Duration {
     const DAY_SECONDS: u64 = 24 * 60 * 60;
 
     Duration::from_secs(DAY_SECONDS)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForwardedHeaders {
+    pub username_header: String,
+    #[serde(default = "default_forwarded_headers_auto_create_user")]
+    pub auto_create_missing_user: bool,
+}
+
+fn default_forwarded_headers_auto_create_user() -> bool {
+    true
 }
 
 // -- Moonlight
