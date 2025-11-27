@@ -1,10 +1,7 @@
 use common::config::Config;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::{io::ErrorKind, path::Path};
-use tokio::{
-    fs::{self, File},
-    io::{AsyncBufReadExt, BufReader, stdin},
-};
+use tokio::fs::{self, File};
 
 use actix_web::{
     App as ActixApp, HttpServer,
@@ -18,6 +15,7 @@ use simplelog::{ColorChoice, CombinedLogger, SharedLogger, TermLogger, TerminalM
 use crate::{
     api::api_service,
     app::App,
+    human_json::preprocess_human_json,
     web::{web_config_js_service, web_service},
 };
 
@@ -25,15 +23,15 @@ mod api;
 mod app;
 mod web;
 
+mod human_json;
+
 #[actix_web::main]
 async fn main() {
     // Load Config
-    let config = read_or_default::<Config>("./server/config.json").await;
+    let config = read_or_default::<Config>("./server/config.json", true).await;
 
     // TODO: log config: anonymize ips when enabled in file
     // TODO: https://www.reddit.com/r/csharp/comments/166xgcl/comment/jynybpe/
-
-    // TODO: human json: strip comments
 
     let mut log_config = simplelog::ConfigBuilder::default();
 
@@ -126,12 +124,18 @@ async fn start(config: Config) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn read_or_default<T>(path: impl AsRef<Path>) -> T
+async fn read_or_default<T>(path: impl AsRef<Path>, hjson: bool) -> T
 where
     T: DeserializeOwned + Serialize + Default,
 {
     match fs::read_to_string(path.as_ref()).await {
-        Ok(value) => serde_json::from_str(&value).expect("invalid file"),
+        Ok(mut value) => {
+            if hjson {
+                value = preprocess_human_json(value);
+            }
+
+            serde_json::from_str(&value).expect("invalid file")
+        }
         Err(err) if err.kind() == ErrorKind::NotFound => {
             let value = T::default();
 
