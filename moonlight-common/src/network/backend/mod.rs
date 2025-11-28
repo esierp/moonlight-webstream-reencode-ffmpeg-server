@@ -3,4 +3,4 @@ pub mod hyper_openssl;
 #[cfg(feature = "backend_reqwest")]
 pub mod reqwest;
 
-// what about an CURL client
+// TODO: what about an CURL client

@@ -33,6 +33,8 @@ async fn main() {
     // TODO: log config: anonymize ips when enabled in file
     // TODO: https://www.reddit.com/r/csharp/comments/166xgcl/comment/jynybpe/
 
+    // TODO: set config via environment variables or cli flags in docker container?
+
     let mut log_config = simplelog::ConfigBuilder::default();
 
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(

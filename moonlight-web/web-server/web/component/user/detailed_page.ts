@@ -63,6 +63,7 @@ export class DetailedUserPage implements Component {
         this.deleteButton.addEventListener("click", this.delete.bind(this))
         this.deleteButton.classList.add("user-info-delete")
         this.deleteButton.innerText = "Delete"
+        this.deleteButton.type = "button"
         this.formRoot.appendChild(this.deleteButton)
 
         this.formRoot.addEventListener("submit", this.apply.bind(this))
