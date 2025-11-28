@@ -71,7 +71,7 @@ function polyfillAddEventListener(this: EventTarget, type: string, listener: Eve
         options.signal = undefined
 
         const removeListener = () => {
-            realRemoveEventListener(type, listener)
+            realRemoveEventListener.call(this, type, listener)
             signal.removeEventListener("abort", removeListener)
         }
         signal.addEventListener("abort", removeListener)
