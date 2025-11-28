@@ -180,8 +180,8 @@ class MainApp implements Component {
             } catch (e) {
                 if (e instanceof FetchError) {
                     const response = e.getResponse()
-                    if (response && response.status == 400) {
-                        showErrorPopup("couldn't add host: not found")
+                    if (response && response.status == 404) {
+                        showErrorPopup(`Host "${host.address}" is not reachable`)
                         return
                     }
                 }
