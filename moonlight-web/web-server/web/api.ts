@@ -195,13 +195,7 @@ export async function fetchApi<Initial, Other>(api: Api, endpoint: string, metho
 export async function fetchApi(api: Api, endpoint: string, method: string = GET, init?: { response?: "json" | "ignore" | "jsonStreaming" } & ApiFetchInit) {
     const [url, request] = buildRequest(api, endpoint, method, init)
 
-    const timeoutAbort = new AbortController()
-    request.signal = timeoutAbort.signal
-    if (!init?.noTimeout) {
-        setTimeout(() => timeoutAbort.abort(
-            new FetchError("timeout", endpoint, method)
-        ), API_TIMEOUT)
-    }
+    request.signal = AbortSignal.timeout(API_TIMEOUT)
 
     let response
     try {

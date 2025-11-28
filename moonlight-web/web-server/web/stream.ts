@@ -1,3 +1,4 @@
+import "./polyfill/index.js"
 import { Api, getApi } from "./api.js";
 import { Component } from "./component/index.js";
 import { showErrorPopup } from "./component/error.js";

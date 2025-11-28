@@ -1,3 +1,4 @@
+import "./polyfill/index.js"
 import { Api, getApi, apiPostHost, FetchError, apiLogout, apiGetUser, tryLogin } from "./api.js";
 import { AddHostModal } from "./component/host/add_modal.js";
 import { HostList } from "./component/host/list.js";
@@ -9,7 +10,7 @@ import { GameList } from "./component/game/list.js";
 import { Host } from "./component/host/index.js";
 import { App, DetailedUser } from "./api_bindings.js";
 import { getLocalStreamSettings, setLocalStreamSettings, StreamSettingsComponent } from "./component/settings_menu.js";
-import { setTouchContextMenuEnabled } from "./ios_right_click.js";
+import { setTouchContextMenuEnabled } from "./polyfill/ios_right_click.js";
 import { buildUrl } from "./config_.js";
 
 async function startApp() {
