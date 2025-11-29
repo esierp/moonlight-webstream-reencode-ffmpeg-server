@@ -161,7 +161,7 @@ unsafe fn convert_decode_unit<'a>(
             None
         } else {
             Some(Duration::from_millis(
-                (raw.frameHostProcessingLatency * 10) as u64,
+                (raw.frameHostProcessingLatency / 10) as u64,
             ))
         },
         receive_time: Duration::from_millis(raw.receiveTimeMs),

@@ -10,6 +10,7 @@ use std::{
 
 use common::{
     StreamSettings,
+    api_bindings::StreamerStatsUpdate,
     config::PortRange,
     ipc::{IpcReceiver, IpcSender, ServerIpcMessage, StreamerIpcMessage, create_process_ipc},
     serialize_json,
@@ -22,7 +23,8 @@ use moonlight_common::{
     pair::ClientAuth,
     stream::{
         MoonlightInstance, MoonlightStream,
-        bindings::{ColorRange, EncryptionFlags, HostFeatures},
+        bindings::{ColorRange, EncryptionFlags, HostFeatures, VideoFormat},
+        video::VideoSetup,
     },
 };
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
@@ -303,7 +305,9 @@ struct StreamConnection {
     // Input
     pub input: StreamInput,
     // Video
-    pub video_size: Mutex<(u32, u32)>,
+    pub stream_info: Mutex<Option<VideoSetup>>,
+    // Stats
+    pub stats_channel: RwLock<Option<Arc<RTCDataChannel>>>,
     // Stream
     pub stream: RwLock<Option<MoonlightStream>>,
     pub timeout_terminate_request: Mutex<Option<Instant>>,
@@ -350,8 +354,9 @@ impl StreamConnection {
             peer: peer.clone(),
             ipc_sender,
             general_channel,
-            video_size: Mutex::new((0, 0)),
+            stream_info: Mutex::new(None),
             input,
+            stats_channel: Default::default(),
             stream: Default::default(),
             timeout_terminate_request: Default::default(),
             is_terminating: AtomicBool::new(false),
@@ -630,7 +635,16 @@ impl StreamConnection {
 
     // -- Data Channels
     async fn on_data_channel(self: &Arc<Self>, channel: Arc<RTCDataChannel>) {
-        self.input.on_data_channel(self, channel).await;
+        debug!("adding data channel: \"{}\"", channel.label());
+
+        if self.input.on_data_channel(self, &channel).await {
+            return;
+        }
+
+        if channel.label() == "stats" {
+            let mut stats = self.stats_channel.write().await;
+            *stats = Some(channel);
+        }
     }
 
     // Start Moonlight Stream
@@ -718,13 +732,12 @@ impl StreamConnection {
             touch: host_features.contains(HostFeatures::PEN_TOUCH_EVENTS),
         };
 
-        let (width, height) = {
-            let video_size = self.video_size.lock().await;
-            if *video_size == (0, 0) {
-                (self.settings.width, self.settings.height)
-            } else {
-                *video_size
-            }
+        let video_setup = {
+            let video_setup = self.stream_info.lock().await;
+            video_setup.unwrap_or_else(|| {
+                warn!("failed to query video setup information. Giving the browser guessed information");
+                VideoSetup { format: VideoFormat::H264, width: self.settings.width, height: self.settings.height, redraw_rate: self.settings.fps, flags: 0 }
+            })
         };
 
         spawn(async move {
@@ -732,8 +745,10 @@ impl StreamConnection {
                 .send(StreamerIpcMessage::WebSocket(
                     StreamServerMessage::ConnectionComplete {
                         capabilities,
-                        width,
-                        height,
+                        codec: format!("{:?}", video_setup.format),
+                        width: video_setup.width,
+                        height: video_setup.height,
+                        fps: video_setup.redraw_rate,
                     },
                 ))
                 .await;
@@ -745,6 +760,29 @@ impl StreamConnection {
         stream_guard.replace(stream);
 
         Ok(())
+    }
+
+    async fn send_stats(&self, stats: StreamerStatsUpdate) {
+        let stats_channel = self.stats_channel.read().await;
+        let Some(stats_channel) = stats_channel.as_ref() else {
+            return;
+        };
+
+        let json = match serde_json::to_string(&stats) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!("failed to serialize stats: {err:?}");
+                return;
+            }
+        };
+
+        if let Err(err) = stats_channel.send_text(json).await {
+            if let webrtc::Error::ErrClosedPipe = err {
+                let mut stats_channel = self.stats_channel.write().await;
+                stats_channel.take();
+            }
+            warn!("failed to send stats: {err:?}");
+        }
     }
 
     async fn request_terminate(self: &Arc<Self>) {
@@ -780,6 +818,7 @@ impl StreamConnection {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
+            debug!("[Stream]: stream is already terminating, won't stop twice");
             return;
         }
 

@@ -627,6 +627,15 @@ canvas.video-stream {
     object-fit: contain;
 }
 
+.video-stats {
+    cursor: default;
+
+    color: yellow;
+
+    position: relative;
+    z-index: 1;
+}
+
 .sidebar-stream {
     display: flex;
     flex-direction: column;

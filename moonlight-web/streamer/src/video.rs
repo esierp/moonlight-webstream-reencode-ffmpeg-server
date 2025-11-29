@@ -6,12 +6,17 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::spawn,
+    time::{Duration, Instant},
 };
 
 use bytes::{Bytes, BytesMut};
+use common::api_bindings::{StatsHostProcessingLatency, StreamerStatsUpdate};
 use log::{debug, error, info, warn};
 use moonlight_common::stream::{
-    bindings::{DecodeResult, FrameType, SupportedVideoFormats, VideoFormat},
+    bindings::{
+        DecodeResult, EstimatedRttInfo, FrameType, SupportedVideoFormats, VideoDecodeUnit,
+        VideoFormat,
+    },
     video::{PullVideoDecoder, PullVideoManager, VideoSetup},
 };
 use webrtc::{
@@ -108,7 +113,10 @@ fn video_thread(
     let mut sender: TrackLocalSender<SequencedTrackLocalStaticRTP> =
         TrackLocalSender::new(stream.clone(), frame_queue_size);
     let needs_idr = Arc::new(AtomicBool::new(false));
-    let mut video_codec = None;
+
+    let video_setup = manager
+        .wait_for_setup()
+        .expect("failed to setup video renderer");
 
     let VideoSetup {
         format,
@@ -116,16 +124,14 @@ fn video_thread(
         height,
         redraw_rate,
         flags: _,
-    } = manager
-        .wait_for_setup()
-        .expect("failed to setup video renderer");
+    } = video_setup;
 
     info!("[Stream] Stream setup: {width}x{height}x{redraw_rate} and {format:?}");
 
     {
-        let mut video_size = stream.video_size.blocking_lock();
+        let mut stream_info = stream.stream_info.blocking_lock();
 
-        *video_size = (width, height);
+        *stream_info = Some(video_setup);
     }
 
     if !format.contained_in(supported_formats) {
@@ -184,46 +190,42 @@ fn video_thread(
         return;
     }
 
-    match format {
+    let mut video_codec = match format {
         // -- H264
-        VideoFormat::H264 | VideoFormat::H264High8_444 => {
-            video_codec = Some(VideoCodec::H264 {
-                nal_reader: H264Reader::new(Cursor::new(Vec::new()), 0),
-                payloader: Default::default(),
-            });
-        }
+        VideoFormat::H264 | VideoFormat::H264High8_444 => VideoCodec::H264 {
+            nal_reader: H264Reader::new(Cursor::new(Vec::new()), 0),
+            payloader: Default::default(),
+        },
         // -- H265
         VideoFormat::H265
         | VideoFormat::H265Main10
         | VideoFormat::H265Rext8_444
-        | VideoFormat::H265Rext10_444 => {
-            video_codec = Some(VideoCodec::H265 {
-                nal_reader: H265Reader::new(Cursor::new(Vec::new()), 0),
-                payloader: Default::default(),
-            });
-        }
+        | VideoFormat::H265Rext10_444 => VideoCodec::H265 {
+            nal_reader: H265Reader::new(Cursor::new(Vec::new()), 0),
+            payloader: Default::default(),
+        },
         // -- AV1
         VideoFormat::Av1Main8
         | VideoFormat::Av1Main10
         | VideoFormat::Av1High8_444
-        | VideoFormat::Av1High10_444 => {
-            video_codec = Some(VideoCodec::Av1 {
-                annex_b: AnnexBSplitter::new(Cursor::new(Vec::new()), 0),
-                payloader: Default::default(),
-            });
-        }
-    }
+        | VideoFormat::Av1High10_444 => VideoCodec::Av1 {
+            annex_b: AnnexBSplitter::new(Cursor::new(Vec::new()), 0),
+            payloader: Default::default(),
+        },
+    };
 
     manager
         .send_setup_result(0)
         .expect("failed to send video setup result");
 
+    let mut stats = VideoStats::default();
     let mut samples = Vec::new();
 
     loop {
         let Ok(mut unit) = manager.wait_for_next_video_frame() else {
             continue;
         };
+        stats.analyze(stream.clone(), &unit);
 
         let timestamp = (unit.presentation_time.as_secs_f64() * clock_rate as f64) as u32;
 
@@ -236,10 +238,10 @@ fn video_thread(
 
         match &mut video_codec {
             // -- H264
-            Some(VideoCodec::H264 {
+            VideoCodec::H264 {
                 nal_reader,
                 payloader,
-            }) => {
+            } => {
                 nal_reader.reset(Cursor::new(full_frame));
 
                 while let Ok(Some(nal)) = nal_reader.next_nal() {
@@ -261,10 +263,10 @@ fn video_thread(
                 );
             }
             // -- H265
-            Some(VideoCodec::H265 {
+            VideoCodec::H265 {
                 nal_reader,
                 payloader,
-            }) => {
+            } => {
                 nal_reader.reset(Cursor::new(full_frame));
 
                 while let Ok(Some(nal)) = nal_reader.next_nal() {
@@ -286,7 +288,7 @@ fn video_thread(
                 );
             }
             // -- AV1
-            Some(VideoCodec::Av1 { annex_b, payloader }) => {
+            VideoCodec::Av1 { annex_b, payloader } => {
                 annex_b.reset(Cursor::new(full_frame));
 
                 while let Ok(Some(annex_b_payload)) = annex_b.next() {
@@ -304,10 +306,6 @@ fn video_thread(
                     important,
                     &needs_idr,
                 );
-            }
-            None => {
-                // this shouldn't happen
-                unreachable!()
             }
         }
 
@@ -527,4 +525,94 @@ fn trim_bytes_to_range(mut buf: BytesMut, range: Range<usize>) -> BytesMut {
     }
 
     buf
+}
+
+#[derive(Debug, Default)]
+struct VideoStats {
+    last_send: Option<Instant>,
+    frame_count: usize,
+    min_host_processing_latency: Duration,
+    max_host_processing_latency: Duration,
+    total_host_processing_latency: Duration,
+}
+
+impl VideoStats {
+    fn analyze(&mut self, stream: Arc<StreamConnection>, unit: &VideoDecodeUnit) {
+        if let Some(frame_processing_latency) = unit.frame_processing_latency {
+            self.min_host_processing_latency = self
+                .min_host_processing_latency
+                .min(frame_processing_latency);
+
+            self.max_host_processing_latency = self
+                .max_host_processing_latency
+                .max(frame_processing_latency);
+
+            self.total_host_processing_latency += frame_processing_latency;
+        }
+        self.frame_count += 1;
+
+        // Send in 1 sec intervall
+        if self
+            .last_send
+            .map(|last_send| last_send + Duration::from_secs(1) < Instant::now())
+            .unwrap_or(true)
+        {
+            // Collect data
+            let has_host_processing_latency = unit.frame_processing_latency.is_some();
+            let min_host_processing_latency = self.min_host_processing_latency;
+            let max_host_processing_latency = self.max_host_processing_latency;
+            let avg_host_processing_latency = self
+                .total_host_processing_latency
+                .div_f32(self.frame_count as f32);
+
+            // Send data
+            let runtime = stream.runtime.clone();
+            runtime.spawn(async move {
+                // Send Video info
+                stream
+                    .send_stats(StreamerStatsUpdate::Video {
+                        host_processing_latency: has_host_processing_latency.then_some(
+                            StatsHostProcessingLatency {
+                                min_host_processing_latency_ms: min_host_processing_latency
+                                    .as_secs_f64()
+                                    * 1000.0,
+                                max_host_processing_latency_ms: max_host_processing_latency
+                                    .as_secs_f64()
+                                    * 1000.0,
+                                avg_host_processing_latency_ms: avg_host_processing_latency
+                                    .as_secs_f64()
+                                    * 1000.0,
+                            },
+                        ),
+                    })
+                    .await;
+
+                // Send RTT info
+                let ml_stream = stream.stream.read().await;
+                if let Some(ml_stream) = ml_stream.as_ref() {
+                    match ml_stream.estimated_rtt_info() {
+                        Ok(EstimatedRttInfo { rtt, rtt_variance }) => {
+                            stream
+                                .send_stats(StreamerStatsUpdate::Rtt {
+                                    rtt_ms: rtt.as_secs_f64() * 1000.0,
+                                    rtt_variance_ms: rtt_variance.as_secs_f64() * 1000.0,
+                                })
+                                .await;
+                        }
+                        Err(err) => {
+                            warn!("failed to get estimated rtt info: {err:?}");
+                        }
+                    };
+                }
+            });
+
+            // Clear data
+            self.min_host_processing_latency = Duration::MAX;
+            self.max_host_processing_latency = Duration::ZERO;
+            self.total_host_processing_latency = Duration::ZERO;
+            self.frame_count = 0;
+
+            self.last_send = Some(Instant::now());
+        }
+    }
 }

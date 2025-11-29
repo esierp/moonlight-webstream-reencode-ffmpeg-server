@@ -13,6 +13,7 @@ import { CanvasRenderer } from "./stream/canvas.js";
 import { StreamCapabilities, StreamKeys } from "./api_bindings.js";
 import { ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
 import { FormModal } from "./component/modal/form.js";
+import { streamStatsToText } from "./stream/stats.js";
 
 async function startApp() {
     const api = await getApi()
@@ -73,6 +74,7 @@ class ViewerApp implements Component {
     private videoElement = document.createElement("video")
     private canvasElement = document.createElement("canvas")
 
+    private statsDiv = document.createElement("div")
     private stream: Stream | null = null
 
     private canvasRenderer: CanvasRenderer | null = null
@@ -91,6 +93,24 @@ class ViewerApp implements Component {
         // Configure sidebar
         this.sidebar = new ViewerSidebar(this)
         setSidebar(this.sidebar)
+
+        // Configure stats element
+        this.statsDiv.hidden = true
+        this.statsDiv.classList.add("video-stats")
+
+        setInterval(() => {
+            // Update stats display every 100ms
+            const stats = this.getStream()?.getStats()
+            if (stats && stats.isEnabled()) {
+                this.statsDiv.hidden = false
+
+                const text = streamStatsToText(stats.getCurrentStats())
+                this.statsDiv.innerText = text
+            } else {
+                this.statsDiv.hidden = true
+            }
+        }, 100)
+        this.div.appendChild(this.statsDiv)
 
         // Configure stream
         const settings = getLocalStreamSettings() ?? defaultStreamSettings()
@@ -728,6 +748,8 @@ class ViewerSidebar implements Component, Sidebar {
     private lockMouseButton = document.createElement("button")
     private fullscreenButton = document.createElement("button")
 
+    private statsButton = document.createElement("button")
+
     private mouseMode: SelectComponent
     private touchMode: SelectComponent
 
@@ -786,6 +808,15 @@ class ViewerSidebar implements Component, Sidebar {
         })
         this.buttonDiv.appendChild(this.fullscreenButton)
 
+        // Stats
+        this.statsButton.innerText = "Stats"
+        this.statsButton.addEventListener("click", () => {
+            const stats = this.app.getStream()?.getStats()
+            if (stats) {
+                stats.toggle()
+            }
+        })
+        this.buttonDiv.appendChild(this.statsButton)
 
         // Select Mouse Mode
         this.mouseMode = new SelectComponent("mouseMode", [

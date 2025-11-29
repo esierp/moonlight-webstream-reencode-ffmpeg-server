@@ -379,8 +379,10 @@ pub enum StreamServerMessage {
     },
     ConnectionComplete {
         capabilities: StreamCapabilities,
+        codec: String,
         width: u32,
         height: u32,
+        fps: u32,
     },
     ConnectionTerminated {
         error_code: i32,
@@ -408,6 +410,26 @@ impl From<moonlight_common::stream::bindings::ConnectionStatus> for ConnectionSt
 #[ts(export, export_to = EXPORT_PATH)]
 pub enum StreamServerGeneralMessage {
     ConnectionStatusUpdate { status: ConnectionStatus },
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub struct StatsHostProcessingLatency {
+    pub min_host_processing_latency_ms: f64,
+    pub max_host_processing_latency_ms: f64,
+    pub avg_host_processing_latency_ms: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub enum StreamerStatsUpdate {
+    Rtt {
+        rtt_ms: f64,
+        rtt_variance_ms: f64,
+    },
+    Video {
+        host_processing_latency: Option<StatsHostProcessingLatency>,
+    },
 }
 
 // Virtual-Key Codes

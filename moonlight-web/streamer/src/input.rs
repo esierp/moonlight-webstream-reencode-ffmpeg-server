@@ -1,7 +1,7 @@
 use std::{pin::Pin, sync::Arc};
 
 use bytes::Bytes;
-use log::{debug, warn};
+use log::warn;
 use moonlight_common::stream::{
     MoonlightStream,
     bindings::{
@@ -35,12 +35,8 @@ impl StreamInput {
     pub async fn on_data_channel(
         &self,
         connection: &Arc<StreamConnection>,
-        data_channel: Arc<RTCDataChannel>,
+        data_channel: &Arc<RTCDataChannel>,
     ) -> bool {
-        debug!(
-            "[Stream Input]: adding data channel: \"{}\"",
-            data_channel.label()
-        );
         let label = data_channel.label();
 
         match label {
@@ -76,7 +72,7 @@ impl StreamInput {
                 }));
 
                 let mut controllers = self.controllers.write().await;
-                controllers.replace(data_channel);
+                controllers.replace(data_channel.clone());
 
                 return true;
             }

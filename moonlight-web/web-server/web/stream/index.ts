@@ -2,6 +2,7 @@ import { Api } from "../api.js"
 import { App, ConnectionStatus, RtcIceCandidate, StreamCapabilities, StreamClientMessage, StreamServerGeneralMessage, StreamServerMessage } from "../api_bindings.js"
 import { StreamSettings } from "../component/settings_menu.js"
 import { defaultStreamInputConfig, StreamInput } from "./input.js"
+import { StreamStats } from "./stats.js"
 import { createSupportedVideoFormatsBits, VideoCodecSupport } from "./video.js"
 
 export type InfoEvent = CustomEvent<
@@ -56,6 +57,7 @@ export class Stream {
 
     private peer: RTCPeerConnection | null = null
     private input: StreamInput
+    private stats: StreamStats
 
     private streamerSize: [number, number]
 
@@ -104,6 +106,9 @@ export class Stream {
             controllerConfig: this.settings.controllerConfig
         })
         this.input = new StreamInput(streamInputConfig)
+
+        // Stream Stats
+        this.stats = new StreamStats()
 
         // Dispatch info for next frame so that listeners can be registers
         setTimeout(() => {
@@ -158,6 +163,7 @@ export class Stream {
         this.peer.addEventListener("iceconnectionstatechange", this.onIceConnectionStateChange.bind(this))
 
         this.input.setPeer(this.peer)
+        this.stats.setPeer(this.peer)
 
         // Maybe we already received data
         if (this.remoteDescription) {
@@ -213,8 +219,10 @@ export class Stream {
             this.eventTarget.dispatchEvent(event)
         } else if ("ConnectionComplete" in message) {
             const capabilities = message.ConnectionComplete.capabilities
+            const codec = message.ConnectionComplete.codec
             const width = message.ConnectionComplete.width
             const height = message.ConnectionComplete.height
+            const fps = message.ConnectionComplete.fps
 
             const event: InfoEvent = new CustomEvent("stream-info", {
                 detail: { type: "connectionComplete", capabilities }
@@ -223,6 +231,8 @@ export class Stream {
             this.eventTarget.dispatchEvent(event)
 
             this.input.onStreamStart(capabilities, [width, height])
+
+            this.stats.setVideoInfo(codec, width, height, fps)
         }
         // -- WebRTC Config
         else if ("WebRtcConfig" in message) {
@@ -361,6 +371,10 @@ export class Stream {
             this.debugLog(`playoutDelayHint not supported in receiver: ${event.receiver.track.label}`)
         }
 
+        if (event.track.kind == "video") {
+            this.stats.setVideoReceiver(event.receiver)
+        }
+
         if (!this.settings?.canvasRenderer) {
             const stream = event.streams[0]
             if (stream) {
@@ -490,6 +504,9 @@ export class Stream {
 
     getInput(): StreamInput {
         return this.input
+    }
+    getStats(): StreamStats {
+        return this.stats
     }
 
     getStreamerSize(): [number, number] {
