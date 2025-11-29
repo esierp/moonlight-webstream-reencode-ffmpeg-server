@@ -16,10 +16,14 @@ export type StreamStatsData = {
     minStreamerProcessingTimeMs: number | null
     maxStreamerProcessingTimeMs: number | null
     avgStreamerProcessingTimeMs: number | null
+    webrtcJitterMs: number | null
     webrtcJitterBufferDelayMs: number | null
+    webrtcJitterBufferTargetDelayMs: number | null
+    webrtcJitterBufferMinimumDelayMs: number | null
     webrtcTotalAssemblyTime: number | null
     webrtcTotalDecodeTime: number | null
     webrtcTotalProcessingDelayMs: number | null
+    webrtcPacketsReceived: number | null,
     webrtcPacketsLost: number | null
     webrtcFramesDropped: number | null
     webrtcKeyFramesDecoded: number | null
@@ -40,11 +44,12 @@ streamer round trip time: ${num(statsData.streamerRttMs, "ms")} (variance: ${num
 host processing latency min/max/avg: ${num(statsData.minHostProcessingLatencyMs, "ms")} / ${num(statsData.maxHostProcessingLatencyMs, "ms")} / ${num(statsData.avgHostProcessingLatencyMs, "ms")}
 streamer processing latency min/max/avg: ${num(statsData.minStreamerProcessingTimeMs, "ms")} / ${num(statsData.maxStreamerProcessingTimeMs, "ms")} / ${num(statsData.avgStreamerProcessingTimeMs, "ms")}
 webrtc fps: ${num(statsData.webrtcFps)}
-webrtc jitter buffer delay: ${num(statsData.webrtcJitterBufferDelayMs, "ms")}
+webrtc jitter: ${num(statsData.webrtcJitterMs, "ms")}
+webrtc jitter buffer delay normal/target/min: ${num(statsData.webrtcJitterBufferDelayMs, "ms")} / ${num(statsData.webrtcJitterBufferTargetDelayMs, "ms")} / ${num(statsData.webrtcJitterBufferMinimumDelayMs, "ms")}
 webrtc total decode time: ${num(statsData.webrtcTotalDecodeTime, "ms")}
 webrtc total assembly time: ${num(statsData.webrtcTotalAssemblyTime, "ms")}
 webrtc total processing delay: ${num(statsData.webrtcTotalProcessingDelayMs, "ms")}
-webrtc packets lost: ${num(statsData.webrtcPacketsLost)}
+webrtc packets received/lost: ${num(statsData.webrtcPacketsReceived)} / ${num(statsData.webrtcPacketsLost)}
 webrtc frames dropped: ${num(statsData.webrtcFramesDropped)}
 webrtc key frames decoded: ${num(statsData.webrtcKeyFramesDecoded)}
 `
@@ -73,10 +78,14 @@ export class StreamStats {
         minStreamerProcessingTimeMs: null,
         maxStreamerProcessingTimeMs: null,
         avgStreamerProcessingTimeMs: null,
+        webrtcJitterMs: null,
         webrtcJitterBufferDelayMs: null,
+        webrtcJitterBufferTargetDelayMs: null,
+        webrtcJitterBufferMinimumDelayMs: null,
         webrtcTotalAssemblyTime: null,
         webrtcTotalDecodeTime: null,
         webrtcTotalProcessingDelayMs: null,
+        webrtcPacketsReceived: null,
         webrtcPacketsLost: null,
         webrtcFramesDropped: null,
         webrtcKeyFramesDecoded: null,
@@ -160,6 +169,10 @@ export class StreamStats {
 
         const stats = await this.videoReceiver.getStats()
         for (const [_, value] of stats) {
+            if (value.type != "inbound-rtp") {
+                continue
+            }
+
             if ("decoderImplementation" in value && value.decoderImplementation != null) {
                 this.statsData.decoderImplementation = value.decoderImplementation
             }
@@ -176,6 +189,15 @@ export class StreamStats {
             if ("jitterBufferDelay" in value && value.jitterBufferDelay != null) {
                 this.statsData.webrtcJitterBufferDelayMs = value.jitterBufferDelay
             }
+            if ("jitterBufferTargetDelay" in value && value.jitterBufferTargetDelay != null) {
+                this.statsData.webrtcJitterBufferTargetDelayMs = value.jitterBufferTargetDelay
+            }
+            if ("jitterBufferMinimumDelay" in value && value.jitterBufferMinimumDelay != null) {
+                this.statsData.webrtcJitterBufferMinimumDelayMs = value.jitterBufferMinimumDelay
+            }
+            if ("jitter" in value && value.jitter != null) {
+                this.statsData.webrtcJitterMs = value.jitter
+            }
             if ("totalDecodeTime" in value && value.totalDecodeTime != null) {
                 this.statsData.webrtcTotalDecodeTime = value.totalDecodeTime
             }
@@ -184,6 +206,9 @@ export class StreamStats {
             }
             if ("totalProcessingDelay" in value && value.totalProcessingDelay != null) {
                 this.statsData.webrtcTotalProcessingDelayMs = value.totalProcessingDelay
+            }
+            if ("packetsReceived" in value && value.packetsReceived != null) {
+                this.statsData.webrtcPacketsReceived = value.packetsReceived
             }
             if ("packetsLost" in value && value.packetsLost != null) {
                 this.statsData.webrtcPacketsLost = value.packetsLost
