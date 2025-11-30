@@ -13,7 +13,7 @@ export type InfoEvent = CustomEvent<
     { type: "connectionComplete", capabilities: StreamCapabilities } |
     { type: "connectionStatus", status: ConnectionStatus } |
     { type: "connectionTerminated", errorCode: number } |
-    { type: "addDebugLine", line: string, fatal: boolean } |
+    { type: "addDebugLine", line: string, additional?: "fatal" | "recover" } |
     { type: "videoTrack", track: MediaStreamTrack }
 >
 export type InfoEventListener = (event: InfoEvent) => void
@@ -131,10 +131,10 @@ export class Stream {
         })
     }
 
-    private debugLog(message: string, fatal?: boolean) {
+    private debugLog(message: string, type?: "fatal" | "recover") {
         for (const line of message.split("\n")) {
             const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "addDebugLine", line, fatal: fatal ?? false }
+                detail: { type: "addDebugLine", line, additional: type }
             })
 
             this.eventTarget.dispatchEvent(event)
@@ -423,7 +423,16 @@ export class Stream {
             this.debugLog("OnConnectionStateChange without a peer")
             return
         }
-        this.debugLog(`Changing Peer State to ${this.peer.connectionState}`)
+
+        let type: undefined | "fatal" | "recover" = undefined
+
+        if (this.peer.connectionState == "connected") {
+            type = "recover"
+        } else if (this.peer.connectionState == "failed") {
+            type = "fatal"
+        }
+
+        this.debugLog(`Changing Peer State to ${this.peer.connectionState}`, type)
     }
     private onIceConnectionStateChange() {
         if (!this.peer) {

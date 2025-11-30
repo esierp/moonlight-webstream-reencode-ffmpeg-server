@@ -703,8 +703,10 @@ class ConnectionInfoModal implements Modal<void> {
         } else if (data.type == "addDebugLine") {
             this.debugLog(data.line)
 
-            if (data.fatal) {
+            if (data.additional == "fatal") {
                 showModal(this)
+            } else if (data.additional == "recover") {
+                showModal(null)
             }
         } else if (data.type == "serverMessage") {
             const text = `Server: ${data.message}`
