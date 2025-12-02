@@ -401,6 +401,11 @@ Automatically create a new user when the requested user specified in the [userna
 
 4. The first user to login will be created and will be an admin. All previously stored hosts will be moved to this user.
 
+Other changes:
+- Proxy path changed:
+  - change all instances of `ProxyPass ${MOONLIGHT_SUBPATH}/ http://${MOONLIGHT_STREAMER}/`<br> to `ProxyPass ${MOONLIGHT_SUBPATH}/ http://${MOONLIGHT_STREAMER}${MOONLIGHT_SUBPATH}/`
+  - [Proxying via Apache 2](https://github.com/MrCreativ3001/moonlight-web-stream/tree/v2?tab=readme-ov-file#proxying-via-apache-2)
+
 ## Building
 Make sure you've cloned this repo with all it's submodules
 ```sh
