@@ -235,6 +235,11 @@ By default the [auto create missing user](#forwarded-header-auto-create-missing-
 The config file is under `server/config.json` relative to the executable.
 Here are the most important settings for configuring Moonlight Web.
 
+Most options have command line arguments or environment variables associated with them.
+```sh
+./web-server help
+```
+
 For a full list of values look into the [Rust Config module](moonlight-web/common/src/config.rs).
 
 ### Bind Address 
@@ -314,6 +319,38 @@ A list of ice servers for webrtc to use.
 }
 ```
 
+You can also set ice servers with environment variables:
+```dockerfile
+ENV WEBRTC_ICE_SERVER_0_URL=stun:stun.l.google.com:5349
+ENV WEBRTC_ICE_SERVER_0_USERNAME=name
+ENV WEBRTC_ICE_SERVER_0_CREDENTIAL=cred
+ENV WEBRTC_ICE_SERVER_1_URL=stun:stun1.l.google.com:5349
+```
+will currespond to the ice server
+```json
+{
+    "webrtc": {
+        "ice_servers": [
+            {
+                "urls": [
+                    "stun:stun.l.google.com:19302",
+                ],
+                "username": "test",
+                "credential": "cred"
+            },
+            {
+                "urls": [
+                    "stun:stun1.l.google.com:5349"
+                ]
+            }
+        ]
+    }
+}
+```
+
+On first startup you can disable all default ice servers with the cli argument `--disable-default-webrtc-ice-servers` or the environment variable `DISABLE_DEFAULT_WEBRTC_ICE_SERVERS`.
+After the `config.json` has been generated all ice server in it will be used, even if those are the defaults.
+
 ### WebRTC Nat 1 to 1 ips
 This will advertise the ip as an ice candidate on the web server.
 It's recommended to set this but stun servers should figure out the public ip.
@@ -333,6 +370,11 @@ It's recommended to set this but stun servers should figure out the public ip.
         }
     }
 }
+```
+
+You can also use the cli argument `--webrtc-nat-1to1-host` or environment variable `WEBRTC_NAT_1TO1_HOST` to use a ip as a host candidate type. This will do the same as the json above.
+```dockerfile
+ENV WEBRTC_NAT_1TO1_HOST=74.125.224.72
 ```
 
 ### WebRTC Network Types
