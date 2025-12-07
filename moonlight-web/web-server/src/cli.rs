@@ -90,6 +90,9 @@ pub struct CliConfig {
     /// Overwrites `web_server.certificate.private_key_pem`.
     #[arg(long, env = "SSL_PRIVATE_KEY")]
     pub ssl_private_key: Option<String>,
+    /// Overwrites `web_server.url_path_prefix`.
+    #[arg(long, env = "PATH_PREFIX")]
+    pub path_prefix: Option<String>,
     /// Overwrites `web_server.forwarded_header.username_header`.
     #[arg(long, env = "FORWARDED_HEADER")]
     pub forwarded_header: Option<String>,
@@ -145,6 +148,9 @@ impl CliConfig {
             _ => {
                 panic!("To enable https you need to set --ssl-certificate and --ssl-private-key");
             }
+        }
+        if let Some(url_path_prefix) = self.path_prefix {
+            config.web_server.url_path_prefix = url_path_prefix;
         }
         if let Some(forwarded_header) = self.forwarded_header {
             config.web_server.forwarded_header = Some(ForwardedHeaders {
