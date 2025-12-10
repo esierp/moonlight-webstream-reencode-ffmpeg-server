@@ -19,6 +19,7 @@ It hosts a Web Server which will forward [Sunshine](https://docs.lizardbyte.dev/
   - [Authentication with a Reverse Proxy](#authentication-using-a-reverse-proxy)
 - [Config](#config)
 - [Migrating to v2](#migrating-to-v2)
+- [Contributors](#contributors)
 - [Building](#building)
 
 ## Images
@@ -450,6 +451,9 @@ Other changes:
 - Proxy path changed:
   - change all instances of `ProxyPass ${MOONLIGHT_SUBPATH}/ http://${MOONLIGHT_STREAMER}/`<br> to `ProxyPass ${MOONLIGHT_SUBPATH}/ http://${MOONLIGHT_STREAMER}${MOONLIGHT_SUBPATH}/`
   - [Proxying via Apache 2](https://github.com/MrCreativ3001/moonlight-web-stream/tree/v2?tab=readme-ov-file#proxying-via-apache-2)
+
+## Contributors
+- Thanks to [@Argon2000](https://github.com/Argon2000) for implementing a canvas renderer, which makes this run in the Tesla browser.
 
 ## Building
 Make sure you've cloned this repo with all it's submodules
