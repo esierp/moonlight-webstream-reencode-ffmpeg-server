@@ -3,7 +3,7 @@
 
 Run with
 ```sh
-docker run -d -p 8080:8080 -p 40000-40100:40000-40100/udp -e WEBRTC_NAT_1TO1_HOST=YOUR_LAN_IP mrcreativ3001/moonlight-web-stream:v2.0-prerelease.1
+docker run -d -p 8080:8080 -p 40000-40100:40000-40100/udp -e WEBRTC_NAT_1TO1_HOST=YOUR_LAN_IP mrcreativ3001/moonlight-web-stream:latest
 ```
 and replace `YOUR_LAN_IP` with the device ip address of the local network.
 
@@ -13,7 +13,7 @@ and replace `YOUR_LAN_IP` with the device ip address of the local network.
 
 2. Create a new `.env` file with:
 ```dotenv
-ML_WEB_VERSION=v2.0-prerelease.1
+ML_WEB_VERSION=latest
 
 LAN_ADDRESS=127.0.0.1 # Change this to the device ip address of the local network.
 

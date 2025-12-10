@@ -6,7 +6,7 @@ ENV MOONLIGHT_WEB_PATH=/moonlight-web
 WORKDIR ${MOONLIGHT_WEB_PATH}
 
 # Download the release binary
-ADD https://github.com/MrCreativ3001/moonlight-web-stream/releases/download/v2.0-prerelease.1/moonlight-web-x86_64-unknown-linux-gnu.tar.gz /tmp/app.tar.gz
+ADD https://github.com/MrCreativ3001/moonlight-web-stream/releases/latest/download/moonlight-web-x86_64-unknown-linux-gnu.tar.gz /tmp/app.tar.gz
 
 # Extract it
 RUN tar -xvzf /tmp/app.tar.gz --strip-components=1 -C ${MOONLIGHT_WEB_PATH}/ &&\

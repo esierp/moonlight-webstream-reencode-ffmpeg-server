@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   moonlight-web:
-    image: mrcreativ3001/moonlight-web-stream:v2.0-prerelease.1
+    image: mrcreativ3001/moonlight-web-stream:latest
     container_name: moonlight-web
     restart: unless-stopped
     ports:
