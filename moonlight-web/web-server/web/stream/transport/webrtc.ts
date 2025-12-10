@@ -316,7 +316,6 @@ export class WebRTCTransport implements Transport {
 
     onclose: (() => void) | null = null
     async close(): Promise<void> {
-        // TODO: when is it actually closed? await?
         this.peer?.close()
     }
 

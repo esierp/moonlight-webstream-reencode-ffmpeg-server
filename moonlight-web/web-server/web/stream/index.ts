@@ -49,8 +49,6 @@ export function getStreamerSize(settings: StreamSettings, viewerScreenSize: [num
     return [width, height]
 }
 
-// TODO: create logger
-
 export class Stream implements Component {
     private logger: Logger = new Logger()
 

@@ -8,7 +8,6 @@ export type VideoRendererSetup = {
     fps: number
 }
 
-// TODO: class? YES PLEASE, check using instanceof
 export abstract class VideoRenderer implements Component {
     readonly implementationName: string
 
