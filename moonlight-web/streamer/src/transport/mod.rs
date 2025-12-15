@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use common::{
     StreamSettings,
     api_bindings::{StreamClientMessage, StreamServerMessage, TransportChannelId},
@@ -29,6 +30,7 @@ pub enum TransportError {
     Closed,
 }
 
+#[derive(Debug)]
 pub enum InboundPacket {
     General {
         message: StreamClientMessage,
@@ -357,6 +359,7 @@ impl InboundPacket {
     }
 }
 
+#[derive(Debug)]
 pub enum OutboundPacket {
     General {
         message: StreamServerMessage,
@@ -374,7 +377,10 @@ pub enum OutboundPacket {
 }
 
 impl OutboundPacket {
-    pub fn serialize(self, raw_buffer: &mut Vec<u8>) -> Option<(TransportChannel, &[u8])> {
+    pub fn serialize<'a>(
+        &self,
+        raw_buffer: &'a mut Vec<u8>,
+    ) -> Option<(TransportChannel, &'a [u8])> {
         match self {
             Self::General { message } => {
                 let Ok(text) = serde_json::to_string(&message) else {
@@ -401,9 +407,9 @@ impl OutboundPacket {
 
                 // Requires 6 bytes
                 buffer.put_u8(0);
-                buffer.put_u8(controller_number);
-                buffer.put_u16(low_frequency_motor);
-                buffer.put_u16(high_frequency_motor);
+                buffer.put_u8(*controller_number);
+                buffer.put_u16(*low_frequency_motor);
+                buffer.put_u16(*high_frequency_motor);
 
                 Some((
                     TransportChannel(TransportChannelId::CONTROLLER0 + controller_number),
@@ -419,9 +425,9 @@ impl OutboundPacket {
 
                 // Requires 6 bytes
                 buffer.put_u8(0);
-                buffer.put_u8(controller_number);
-                buffer.put_u16(left_trigger_motor);
-                buffer.put_u16(right_trigger_motor);
+                buffer.put_u8(*controller_number);
+                buffer.put_u16(*left_trigger_motor);
+                buffer.put_u16(*right_trigger_motor);
 
                 Some((
                     TransportChannel(TransportChannelId::CONTROLLER0 + controller_number),
@@ -436,29 +442,32 @@ pub enum TransportEvent {
     StartStream { settings: StreamSettings },
     RecvPacket(InboundPacket),
     SendIpc(StreamerIpcMessage),
+    // TODO: use the error and not this event here
     Closed,
 }
 
-// Those are blocking functions in the traits!
-
 pub trait TransportEvents {
-    fn poll_event(&mut self) -> Result<TransportEvent, TransportError>;
+    async fn poll_event(&mut self) -> Result<TransportEvent, TransportError>;
 }
+#[async_trait]
 pub trait TransportSender {
-    fn setup_video(&mut self, setup: VideoSetup) -> i32;
-    fn send_video_unit(&mut self, unit: VideoDecodeUnit) -> Result<DecodeResult, TransportError>;
+    async fn setup_video(&self, setup: VideoSetup) -> i32;
+    async fn send_video_unit<'a>(
+        &'a self,
+        unit: VideoDecodeUnit<'a>,
+    ) -> Result<DecodeResult, TransportError>;
 
-    fn setup_audio(
-        &mut self,
+    async fn setup_audio(
+        &self,
         audio_config: AudioConfig,
         stream_config: OpusMultistreamConfig,
     ) -> i32;
-    fn send_audio_sample(&mut self, data: &[u8]) -> Result<(), TransportError>;
+    async fn send_audio_sample(&self, data: &[u8]) -> Result<(), TransportError>;
 
-    fn send(&mut self, packet: OutboundPacket) -> Result<(), TransportError>;
+    async fn send(&self, packet: OutboundPacket) -> Result<(), TransportError>;
 
-    fn on_ipc_message(&mut self, message: ServerIpcMessage);
+    async fn on_ipc_message(&self, message: ServerIpcMessage) -> Result<(), TransportError>;
 
-    fn is_closed(&mut self) -> bool;
-    fn close(&mut self) -> Result<(), TransportError>;
+    fn is_closed(&self) -> bool;
+    async fn close(&self) -> Result<(), TransportError>;
 }

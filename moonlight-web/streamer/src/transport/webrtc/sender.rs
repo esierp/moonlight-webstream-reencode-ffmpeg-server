@@ -6,7 +6,10 @@ use std::{
 
 use anyhow::anyhow;
 use log::{debug, warn};
-use tokio::sync::{Mutex, Notify};
+use tokio::{
+    sync::{Mutex, Notify},
+    task::{block_in_place, spawn_blocking},
+};
 use webrtc::{
     media::Sample,
     rtcp::packet::Packet,
@@ -56,6 +59,14 @@ where
         }
     }
 
+    // TODO: make the blocking calls use runtime.block_on
+    pub async fn create_track(
+        &mut self,
+        track: Track,
+        on_packet: impl FnMut(Box<dyn Packet + Send + Sync>) + Send + 'static,
+    ) -> Result<(), anyhow::Error> {
+        block_in_place(|| self.blocking_create_track(track, on_packet))
+    }
     pub fn blocking_create_track(
         &mut self,
         track: Track,
@@ -100,14 +111,11 @@ where
     }
 
     /// Returns if the frame will be delivered
-    pub fn blocking_send_samples(&self, samples: Vec<Track::Sample>, important: bool) -> bool {
-        let mut queue = self.queue.blocking_lock();
+    pub async fn send_samples(&self, samples: Vec<Track::Sample>, important: bool) -> bool {
+        let mut queue = self.queue.lock().await;
 
-        self.new_samples_notify.notify_waiters();
-
-        if important {
+        let result = if important {
             queue.push_front(FrameSamples { important, samples });
-
             true
         } else {
             if queue.len() > self.channel_queue_size {
@@ -115,20 +123,29 @@ where
             }
 
             queue.push_front(FrameSamples { important, samples });
-
             true
-        }
+        };
+
+        self.new_samples_notify.notify_waiters();
+
+        result
+    }
+    pub fn blocking_send_samples(&self, samples: Vec<Track::Sample>, important: bool) -> bool {
+        todo!()
     }
 
     /// Returns if the frame will be delivered
-    pub fn blocking_clear_queue(&self, clear_important: bool) {
-        let mut queue = self.queue.blocking_lock();
+    pub async fn clear_queue(&self, clear_important: bool) {
+        let mut queue = self.queue.lock().await;
 
         if clear_important {
             queue.clear();
         } else {
             queue.retain(|frame| frame.important);
         }
+    }
+    pub fn blocking_clear_queue(&self, clear_important: bool) {
+        todo!()
     }
 }
 

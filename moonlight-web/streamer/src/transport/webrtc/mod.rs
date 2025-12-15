@@ -5,6 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use async_trait::async_trait;
 use common::{
     StreamSettings,
     api_bindings::{
@@ -12,11 +13,10 @@ use common::{
         StreamServerMessage, StreamSignalingMessage, TransportChannelId,
     },
     config::{PortRange, WebRtcConfig},
-    ipc::{IpcReceiver, IpcSender, ServerIpcMessage, StreamerIpcMessage},
+    ipc::{ServerIpcMessage, StreamerIpcMessage},
 };
 use log::{debug, info, warn};
 use moonlight_common::stream::{
-    MoonlightInstance,
     bindings::{AudioConfig, DecodeResult, OpusMultistreamConfig, VideoDecodeUnit},
     video::VideoSetup,
 };
@@ -50,14 +50,12 @@ use webrtc::{
 };
 
 use crate::{
-    StreamInfo,
     convert::{
-        from_webrtc_ice, from_webrtc_sdp, into_webrtc_ice, into_webrtc_ice_candidate,
-        into_webrtc_network_type,
+        from_webrtc_sdp, into_webrtc_ice, into_webrtc_ice_candidate, into_webrtc_network_type,
     },
     transport::{
-        InboundPacket, TransportChannel, TransportError, TransportEvent, TransportEvents,
-        TransportSender,
+        InboundPacket, OutboundPacket, TransportChannel, TransportError, TransportEvent,
+        TransportEvents, TransportSender,
         webrtc::{
             audio::{WebRtcAudio, register_audio_codecs},
             video::{WebRtcVideo, register_video_codecs},
@@ -579,9 +577,10 @@ pub struct WebRTCTransportEvents {
 }
 
 impl TransportEvents for WebRTCTransportEvents {
-    fn poll_event(&mut self) -> Result<TransportEvent, TransportError> {
+    async fn poll_event(&mut self) -> Result<TransportEvent, TransportError> {
         self.event_receiver
-            .blocking_recv()
+            .recv()
+            .await
             .ok_or(TransportError::Closed)
     }
 }
@@ -590,59 +589,77 @@ pub struct WebRTCTransportSender {
     inner: Arc<WebRtcInner>,
 }
 
+#[async_trait]
 impl TransportSender for WebRTCTransportSender {
-    fn setup_video(&mut self, setup: VideoSetup) -> i32 {
-        let mut video = self.inner.video.blocking_lock();
-        if video.as_mut().unwrap().setup(setup) {
+    async fn setup_video(&self, setup: VideoSetup) -> i32 {
+        let mut video = self.inner.video.lock().await;
+        if video.as_mut().unwrap().setup(setup).await {
             0
         } else {
             -1
         }
     }
-    fn send_video_unit(&mut self, unit: VideoDecodeUnit) -> Result<DecodeResult, TransportError> {
-        let mut video = self.inner.video.blocking_lock();
-        Ok(video.as_mut().unwrap().send_decode_unit(&unit))
+    async fn send_video_unit<'a>(
+        &'a self,
+        unit: VideoDecodeUnit<'a>,
+    ) -> Result<DecodeResult, TransportError> {
+        let mut video = self.inner.video.lock().await;
+        Ok(video.as_mut().unwrap().send_decode_unit(&unit).await)
     }
 
-    fn setup_audio(
-        &mut self,
+    async fn setup_audio(
+        &self,
         audio_config: AudioConfig,
         stream_config: OpusMultistreamConfig,
     ) -> i32 {
-        let mut audio = self.inner.audio.blocking_lock();
+        let mut audio = self.inner.audio.lock().await;
 
-        audio.as_mut().unwrap().setup(audio_config, stream_config)
+        audio
+            .as_mut()
+            .unwrap()
+            .setup(audio_config, stream_config)
+            .await
     }
-    fn send_audio_sample(&mut self, data: &[u8]) -> Result<(), TransportError> {
-        let mut audio = self.inner.audio.blocking_lock();
+    async fn send_audio_sample(&self, data: &[u8]) -> Result<(), TransportError> {
+        let mut audio = self.inner.audio.lock().await;
 
-        audio.as_mut().unwrap().send_audio_sample(data);
+        audio.as_mut().unwrap().send_audio_sample(data).await;
 
         Ok(())
     }
 
-    fn send(&mut self, packet: super::OutboundPacket) -> Result<(), TransportError> {
-        // TODO
-        Ok(())
-    }
+    async fn send(&self, packet: OutboundPacket) -> Result<(), TransportError> {
+        let mut buffer = Vec::new();
 
-    fn on_ipc_message(&mut self, message: ServerIpcMessage) {
-        if let ServerIpcMessage::WebSocket(message) = message {
-            self.inner
-                .runtime
-                .block_on(self.inner.on_ws_message(message));
+        let Some((channel, data)) = packet.serialize(&mut buffer) else {
+            warn!("Failed to serialize packet: {packet:?}");
+            return Ok(());
+        };
+
+        match channel.0 {
+            TransportChannelId::GENERAL => {
+                todo!()
+            }
+            _ => {
+                warn!("Cannot send data on channel {channel:?}");
+            }
         }
+        Ok(())
     }
 
-    fn close(&mut self) -> Result<(), TransportError> {
-        self.inner
-            .runtime
-            .block_on(self.inner.peer.close())
-            .unwrap();
+    async fn on_ipc_message(&self, message: ServerIpcMessage) -> Result<(), TransportError> {
+        if let ServerIpcMessage::WebSocket(message) = message {
+            self.inner.on_ws_message(message).await;
+        }
+        Ok(())
+    }
+
+    async fn close(&self) -> Result<(), TransportError> {
+        self.inner.peer.close().await.unwrap();
 
         Ok(())
     }
-    fn is_closed(&mut self) -> bool {
+    fn is_closed(&self) -> bool {
         todo!()
     }
 }

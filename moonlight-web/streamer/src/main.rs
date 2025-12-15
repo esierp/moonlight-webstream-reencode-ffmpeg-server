@@ -8,7 +8,6 @@ use std::{
         Arc, Weak,
         atomic::{AtomicBool, Ordering},
     },
-    thread,
     time::Duration,
 };
 
@@ -42,17 +41,16 @@ use tokio::{
     io::{stdin, stdout},
     runtime::Handle,
     spawn,
-    sync::{Mutex, RwLock},
+    sync::{Mutex, Notify, RwLock},
     time::sleep,
 };
 
 use common::api_bindings::{StreamCapabilities, StreamServerMessage};
 
 use crate::transport::{
-    InboundPacket, OutboundPacket, TransportEvent, TransportEvents, TransportSender, webrtc,
+    InboundPacket, OutboundPacket, TransportError, TransportEvent, TransportEvents,
+    TransportSender, webrtc,
 };
-
-// TODO: deasyncify this, just remove most of the async code into sync code
 
 pub type RequestClient = ReqwestClient;
 
@@ -198,9 +196,7 @@ async fn main() {
         .await;
 
     // Wait for termination
-    // TODO
-    // connection.terminate.notified().await;
-    sleep(Duration::from_secs(100)).await;
+    connection.terminate.notified().await;
 
     // Exit streamer
     exit(0);
@@ -222,6 +218,7 @@ struct StreamConnection {
     // Stream
     pub stream: RwLock<Option<MoonlightStream>>,
     pub transport_sender: Mutex<Box<dyn TransportSender + Send + Sync>>,
+    pub terminate: Notify,
     is_terminating: AtomicBool,
 }
 
@@ -245,38 +242,37 @@ impl StreamConnection {
             stream_info: Mutex::new(None),
             stream: RwLock::new(None),
             transport_sender: Mutex::new(Box::new(sender)),
+            terminate: Notify::default(),
             is_terminating: AtomicBool::new(false),
         });
 
-        thread::spawn({
+        spawn({
             let runtime = this.runtime.clone();
             let mut ipc_sender = this.ipc_sender.clone();
             let this = Arc::downgrade(&this);
 
-            move || {
-                // TODO: this is blocking
+            async move {
                 loop {
-                    match events.poll_event() {
-                        Ok(value) => match value {
-                            TransportEvent::SendIpc(message) => {
-                                ipc_sender.blocking_send(message);
-                            }
-                            TransportEvent::StartStream { settings } => {
-                                let this = this.upgrade().unwrap();
+                    match events.poll_event().await {
+                        Ok(TransportEvent::SendIpc(message)) => {
+                            ipc_sender.send(message).await;
+                        }
+                        Ok(TransportEvent::StartStream { settings }) => {
+                            // TODO: set settings
+                            let this = this.upgrade().unwrap();
 
-                                runtime.spawn(async move {
-                                    this.start_stream().await.unwrap();
-                                });
-                            }
-                            TransportEvent::RecvPacket(packet) => {
-                                let this = this.upgrade().unwrap();
+                            this.start_stream().await.unwrap();
+                        }
+                        Ok(TransportEvent::RecvPacket(packet)) => {
+                            let this = this.upgrade().unwrap();
 
-                                this.on_packet(packet);
-                            }
-                            TransportEvent::Closed => todo!(),
-                        },
-                        Err(err) => {
-                            todo!();
+                            this.on_packet(packet).await;
+                        }
+                        Err(TransportError::Closed) | Ok(TransportEvent::Closed) => {
+                            let this = this.upgrade().unwrap();
+
+                            this.stop().await;
+                            break;
                         }
                     }
                 }
@@ -293,7 +289,6 @@ impl StreamConnection {
                         return;
                     };
 
-                    // TODO: it should be blocking?
                     if let ServerIpcMessage::Stop = &message {
                         this.on_ipc_message(ServerIpcMessage::Stop).await;
                         return;
@@ -307,57 +302,60 @@ impl StreamConnection {
         Ok(this)
     }
 
-    fn on_packet(&self, packet: InboundPacket) {
-        let stream = self.stream.blocking_read();
-        let stream = stream.as_ref().unwrap();
+    async fn on_packet(&self, packet: InboundPacket) {
+        let stream = self.stream.read().await;
+        let Some(stream) = stream.as_ref() else {
+            warn!("Failed to send packet {packet:?} because of missing stream");
+            return;
+        };
 
-        match packet {
-            InboundPacket::General { message } => todo!(),
+        let err = match packet {
+            InboundPacket::General { message } => {
+                todo!();
+            }
             InboundPacket::MousePosition {
                 x,
                 y,
                 reference_width,
                 reference_height,
-            } => {
-                stream
-                    .send_mouse_position(x, y, reference_width, reference_height)
-                    .unwrap();
-            }
+            } => stream
+                .send_mouse_position(x, y, reference_width, reference_height)
+                .err(),
             InboundPacket::MouseButton { action, button } => {
-                stream.send_mouse_button(action, button).unwrap();
+                stream.send_mouse_button(action, button).err()
             }
             InboundPacket::MouseMove { delta_x, delta_y } => {
-                stream.send_mouse_move(delta_x, delta_y).unwrap();
+                stream.send_mouse_move(delta_x, delta_y).err()
             }
             InboundPacket::HighResScroll { delta_x, delta_y } => {
+                let mut err = None;
                 if delta_y != 0 {
-                    stream.send_high_res_scroll(delta_y).unwrap();
+                    err = stream.send_high_res_scroll(delta_y).err()
                 }
                 if delta_x != 0 {
-                    stream.send_high_res_horizontal_scroll(delta_x).unwrap();
+                    err = stream.send_high_res_horizontal_scroll(delta_x).err()
                 }
+                err
             }
             InboundPacket::Scroll { delta_x, delta_y } => {
+                let mut err = None;
                 if delta_y != 0 {
-                    stream.send_scroll(delta_y).unwrap();
+                    err = stream.send_scroll(delta_y).err();
                 }
                 if delta_x != 0 {
-                    stream.send_horizontal_scroll(delta_x).unwrap();
+                    err = stream.send_horizontal_scroll(delta_x).err();
                 }
+                err
             }
             InboundPacket::Key {
                 action,
                 modifiers,
                 key,
                 flags,
-            } => {
-                stream
-                    .send_keyboard_event_non_standard(key as i16, action, modifiers, flags)
-                    .unwrap();
-            }
-            InboundPacket::Text { text } => {
-                stream.send_text(&text).unwrap();
-            }
+            } => stream
+                .send_keyboard_event_non_standard(key as i16, action, modifiers, flags)
+                .err(),
+            InboundPacket::Text { text } => stream.send_text(&text).err(),
             InboundPacket::Touch {
                 pointer_id,
                 x,
@@ -367,20 +365,18 @@ impl StreamConnection {
                 contact_area_minor,
                 rotation,
                 event_type,
-            } => {
-                stream
-                    .send_touch(
-                        pointer_id,
-                        x,
-                        y,
-                        pressure_or_distance,
-                        contact_area_major,
-                        contact_area_minor,
-                        rotation,
-                        event_type,
-                    )
-                    .unwrap();
-            }
+            } => stream
+                .send_touch(
+                    pointer_id,
+                    x,
+                    y,
+                    pressure_or_distance,
+                    contact_area_major,
+                    contact_area_minor,
+                    rotation,
+                    event_type,
+                )
+                .err(),
             InboundPacket::ControllerConnected {
                 id,
                 ty,
@@ -407,17 +403,21 @@ impl StreamConnection {
                 // TODO
                 todo!();
             }
+        };
+
+        if let Some(err) = err {
+            warn!("Failed to handle packet: {err:?}");
         }
     }
 
     async fn on_ipc_message(self: &Arc<Self>, message: ServerIpcMessage) {
         let this = self.clone();
 
-        self.runtime.spawn_blocking(move || {
-            let mut sender = this.transport_sender.blocking_lock();
+        let sender = this.transport_sender.lock().await;
 
-            sender.on_ipc_message(message);
-        });
+        if let Err(err) = sender.on_ipc_message(message).await {
+            warn!("Failed to send ipc message: {err:?}");
+        }
     }
 
     // Start Moonlight Stream
@@ -531,7 +531,7 @@ impl StreamConnection {
         Ok(())
     }
 
-    fn stop(&self) {
+    async fn stop(&self) {
         if self
             .is_terminating
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -544,16 +544,16 @@ impl StreamConnection {
         debug!("[Stream]: Stopping...");
 
         let stream = {
-            let mut stream = self.stream.blocking_write();
+            let mut stream = self.stream.write().await;
             stream.take()
         };
         drop(stream);
 
         let mut ipc_sender = self.ipc_sender.clone();
-        ipc_sender.blocking_send(StreamerIpcMessage::Stop);
+        ipc_sender.send(StreamerIpcMessage::Stop).await;
 
         info!("Terminating Self");
-        // TODO
+        self.terminate.notify_waiters();
     }
 }
 
@@ -623,7 +623,9 @@ impl ConnectionListener for StreamConnectionListener {
             StreamServerMessage::ConnectionTerminated { error_code },
         ));
 
-        stream.stop();
+        stream.runtime.clone().block_on(async move {
+            stream.stop().await;
+        });
     }
 
     fn log_message(&mut self, message: &str) {
@@ -636,14 +638,19 @@ impl ConnectionListener for StreamConnectionListener {
             return;
         };
 
-        let mut sender = stream.transport_sender.blocking_lock();
-        sender
-            .send(OutboundPacket::General {
-                message: StreamServerMessage::ConnectionStatusUpdate {
-                    status: status.into(),
-                },
-            })
-            .unwrap();
+        stream.clone().runtime.block_on(async move {
+            let sender = stream.transport_sender.lock().await;
+            if let Err(err) = sender
+                .send(OutboundPacket::General {
+                    message: StreamServerMessage::ConnectionStatusUpdate {
+                        status: status.into(),
+                    },
+                })
+                .await
+            {
+                warn!("Failed to send connection status update: {err:?}");
+            }
+        })
     }
 
     fn set_hdr_mode(&mut self, _hdr_enabled: bool) {}
@@ -659,14 +666,19 @@ impl ConnectionListener for StreamConnectionListener {
             return;
         };
 
-        let mut sender = stream.transport_sender.blocking_lock();
-        sender
-            .send(OutboundPacket::ControllerRumble {
-                controller_number: controller_number as u8,
-                low_frequency_motor,
-                high_frequency_motor,
-            })
-            .unwrap();
+        stream.runtime.clone().block_on(async move {
+            let sender = stream.transport_sender.lock().await;
+            if let Err(err) = sender
+                .send(OutboundPacket::ControllerRumble {
+                    controller_number: controller_number as u8,
+                    low_frequency_motor,
+                    high_frequency_motor,
+                })
+                .await
+            {
+                warn!("Failed to send controller rumble: {err:?}");
+            }
+        });
     }
 
     fn controller_rumble_triggers(
@@ -680,15 +692,20 @@ impl ConnectionListener for StreamConnectionListener {
             return;
         };
 
-        let mut sender = stream.transport_sender.blocking_lock();
+        stream.runtime.clone().block_on(async move {
+            let mut sender = stream.transport_sender.blocking_lock();
 
-        sender
-            .send(OutboundPacket::ControllerTriggerRumble {
-                controller_number: controller_number as u8,
-                left_trigger_motor,
-                right_trigger_motor,
-            })
-            .unwrap();
+            if let Err(err) = sender
+                .send(OutboundPacket::ControllerTriggerRumble {
+                    controller_number: controller_number as u8,
+                    left_trigger_motor,
+                    right_trigger_motor,
+                })
+                .await
+            {
+                warn!("Failed to send controller trigger rumble: {err:?}");
+            }
+        });
     }
 
     fn controller_set_motion_event_state(
@@ -735,9 +752,11 @@ impl VideoDecoder for StreamVideoDecoder {
         }
 
         {
-            let mut sender = stream.transport_sender.blocking_lock();
+            stream.runtime.clone().block_on(async move {
+                let mut sender = stream.transport_sender.lock().await;
 
-            sender.setup_video(setup)
+                sender.setup_video(setup).await
+            })
         }
     }
 
@@ -750,15 +769,17 @@ impl VideoDecoder for StreamVideoDecoder {
             return DecodeResult::Ok;
         };
 
-        let mut sender = stream.transport_sender.blocking_lock();
+        stream.runtime.clone().block_on(async move {
+            let mut sender = stream.transport_sender.lock().await;
 
-        match sender.send_video_unit(unit) {
-            Err(err) => {
-                warn!("Failed to send video decode unit: {err}");
-                DecodeResult::Ok
+            match sender.send_video_unit(unit).await {
+                Err(err) => {
+                    warn!("Failed to send video decode unit: {err}");
+                    DecodeResult::Ok
+                }
+                Ok(value) => value,
             }
-            Ok(value) => value,
-        }
+        })
     }
 
     fn supported_formats(&self) -> SupportedVideoFormats {
@@ -786,9 +807,11 @@ impl AudioDecoder for StreamAudioDecoder {
             return -1;
         };
 
-        let mut sender = stream.transport_sender.blocking_lock();
+        stream.runtime.clone().block_on(async move {
+            let mut sender = stream.transport_sender.lock().await;
 
-        sender.setup_audio(audio_config, stream_config)
+            sender.setup_audio(audio_config, stream_config).await
+        })
     }
 
     fn start(&mut self) {}
@@ -800,10 +823,12 @@ impl AudioDecoder for StreamAudioDecoder {
             return;
         };
 
-        let mut stream = stream.transport_sender.blocking_lock();
-        if let Err(err) = stream.send_audio_sample(data) {
-            warn!("Failed to send audio sample: {err}");
-        }
+        stream.runtime.clone().block_on(async move {
+            let mut stream = stream.transport_sender.lock().await;
+            if let Err(err) = stream.send_audio_sample(data).await {
+                warn!("Failed to send audio sample: {err}");
+            }
+        });
     }
 
     fn config(&self) -> AudioConfig {

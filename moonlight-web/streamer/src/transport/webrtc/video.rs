@@ -94,7 +94,7 @@ impl WebRtcVideo {
         }
     }
 
-    pub fn setup(
+    pub async fn setup(
         &mut self,
         VideoSetup {
             format,
@@ -122,30 +122,34 @@ impl WebRtcVideo {
         };
 
         let needs_idr = self.needs_idr.clone();
-        if let Err(err) = self.sender.blocking_create_track(
-            TrackLocalStaticRTP::new(
-                codec.capability.clone(),
-                "video".to_string(),
-                "moonlight".to_string(),
+        if let Err(err) = self
+            .sender
+            .create_track(
+                TrackLocalStaticRTP::new(
+                    codec.capability.clone(),
+                    "video".to_string(),
+                    "moonlight".to_string(),
+                )
+                .into(),
+                {
+                    let needs_idr = needs_idr.clone();
+
+                    move |packet| {
+                        let packet = packet.as_any();
+
+                        if packet.is::<PictureLossIndication>() {
+                            needs_idr.store(true, Ordering::Release);
+                        }
+                        if let Some(_max_bitrate) =
+                            packet.downcast_ref::<ReceiverEstimatedMaximumBitrate>()
+                        {
+                            // Moonlight doesn't support dynamic bitrate changing :(
+                        }
+                    }
+                },
             )
-            .into(),
-            {
-                let needs_idr = needs_idr.clone();
-
-                move |packet| {
-                    let packet = packet.as_any();
-
-                    if packet.is::<PictureLossIndication>() {
-                        needs_idr.store(true, Ordering::Release);
-                    }
-                    if let Some(_max_bitrate) =
-                        packet.downcast_ref::<ReceiverEstimatedMaximumBitrate>()
-                    {
-                        // Moonlight doesn't support dynamic bitrate changing :(
-                    }
-                }
-            },
-        ) {
+            .await
+        {
             error!(
                 "Failed to create video track with format {format:?} and codec \"{codec:?}\": {err:?}"
             );
@@ -188,7 +192,7 @@ impl WebRtcVideo {
         true
     }
 
-    pub fn send_decode_unit(&mut self, unit: &VideoDecodeUnit) -> DecodeResult {
+    pub async fn send_decode_unit(&mut self, unit: &VideoDecodeUnit<'_>) -> DecodeResult {
         let start_frame = Instant::now();
 
         let timestamp = (unit.presentation_time.as_secs_f64() * self.clock_rate as f64) as u32;
@@ -224,7 +228,8 @@ impl WebRtcVideo {
                     timestamp,
                     important,
                     &self.needs_idr,
-                );
+                )
+                .await;
             }
             // -- H265
             Some(VideoCodec::H265 {
@@ -249,7 +254,8 @@ impl WebRtcVideo {
                     timestamp,
                     important,
                     &self.needs_idr,
-                );
+                )
+                .await;
             }
             // -- AV1
             Some(VideoCodec::Av1 { annex_b, payloader }) => {
@@ -269,7 +275,8 @@ impl WebRtcVideo {
                     timestamp,
                     important,
                     &self.needs_idr,
-                );
+                )
+                .await;
             }
             None => {
                 warn!("Failed to send decode unit because of missing codec!");
@@ -315,7 +322,7 @@ pub fn register_video_codecs(
     Ok(())
 }
 
-fn send_single_frame(
+async fn send_single_frame(
     samples: &mut Vec<BytesMut>,
     sender: &mut TrackLocalSender<SequencedTrackLocalStaticRTP>,
     payloader: &mut impl Payloader,
@@ -324,7 +331,7 @@ fn send_single_frame(
     needs_idr: &AtomicBool,
 ) {
     if important {
-        sender.blocking_clear_queue(false);
+        sender.clear_queue(false).await;
     }
 
     let mut peekable = samples.drain(..).peekable();
@@ -349,8 +356,8 @@ fn send_single_frame(
         frame_samples.extend(packets);
     }
 
-    if !sender.blocking_send_samples(frame_samples, important) {
-        sender.blocking_clear_queue(true);
+    if !sender.send_samples(frame_samples, important).await {
+        sender.clear_queue(true).await;
 
         // We've dropped a frame (likely due to buffering)
         needs_idr.store(true, Ordering::Release);

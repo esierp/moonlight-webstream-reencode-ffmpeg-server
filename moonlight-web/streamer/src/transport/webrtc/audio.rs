@@ -46,7 +46,7 @@ impl WebRtcAudio {
 }
 
 impl WebRtcAudio {
-    pub fn setup(
+    pub async fn setup(
         &mut self,
         audio_config: AudioConfig,
         stream_config: OpusMultistreamConfig,
@@ -65,17 +65,21 @@ impl WebRtcAudio {
             );
         }
 
-        if let Err(err) = self.sender.blocking_create_track(
-            TrackLocalStaticSample::new(
-                RTCRtpCodecCapability {
-                    mime_type: MIME_TYPE_OPUS.to_string(),
-                    ..Default::default()
-                },
-                "audio".to_string(),
-                "moonlight".to_string(),
-            ),
-            |_| {},
-        ) {
+        if let Err(err) = self
+            .sender
+            .create_track(
+                TrackLocalStaticSample::new(
+                    RTCRtpCodecCapability {
+                        mime_type: MIME_TYPE_OPUS.to_string(),
+                        ..Default::default()
+                    },
+                    "audio".to_string(),
+                    "moonlight".to_string(),
+                ),
+                |_| {},
+            )
+            .await
+        {
             error!("Failed to create opus track: {err:?}");
             return -1;
         };
@@ -92,7 +96,7 @@ impl WebRtcAudio {
         0
     }
 
-    pub fn send_audio_sample(&mut self, data: &[u8]) {
+    pub async fn send_audio_sample(&mut self, data: &[u8]) {
         let Some(config) = self.config.as_ref() else {
             return;
         };
@@ -109,7 +113,7 @@ impl WebRtcAudio {
             ..Default::default()
         };
 
-        self.sender.blocking_send_samples(vec![sample], false);
+        self.sender.send_samples(vec![sample], false).await;
     }
 
     fn config(&self) -> AudioConfig {

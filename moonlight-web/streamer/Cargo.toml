@@ -11,6 +11,7 @@ common = { path = "../common" }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 webrtc = { workspace = true }
 bytes = { workspace = true }
+async-trait = { workspace = true }
 
 pem = { workspace = true }
 
