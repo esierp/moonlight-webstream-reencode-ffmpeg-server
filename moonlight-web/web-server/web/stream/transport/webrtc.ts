@@ -187,8 +187,10 @@ export class WebRTCTransport implements Transport {
 
         if (this.peer.connectionState == "connected") {
             type = "recover"
+            this.setDelayHintInterval(true)
         } else if ((this.peer.connectionState == "failed" || this.peer.connectionState == "disconnected") && this.peer.iceGatheringState == "complete") {
             type = "fatal"
+            this.setDelayHintInterval(false)
         }
 
         this.logger?.debug(`Changing Peer State to ${this.peer.connectionState}`, {
@@ -208,6 +210,24 @@ export class WebRTCTransport implements Transport {
             return
         }
         this.logger?.debug(`Changing Peer Ice Gathering State to ${this.peer.iceGatheringState}`)
+    }
+
+    private forceDelayInterval: number | null = null
+    private setDelayHintInterval(setRunning: boolean) {
+        if (this.forceDelayInterval == null && setRunning) {
+            this.forceDelayInterval = setInterval(() => {
+                if (!this.peer) {
+                    return
+                }
+
+                for (const receiver of this.peer.getReceivers()) {
+                    // @ts-ignore
+                    receiver.jitterBufferTarget = receiver.jitterBufferDelayHint = receiver.playoutDelayHint = 0
+                }
+            }, 15)
+        } else if (this.forceDelayInterval != null && !setRunning) {
+            clearInterval(this.forceDelayInterval)
+        }
     }
 
     private channels: Array<TransportChannel | null> = []
@@ -257,12 +277,6 @@ export class WebRTCTransport implements Transport {
     private onTrack(event: RTCTrackEvent) {
         const track = event.track
 
-        if ("playoutDelayHint" in event.receiver) {
-            event.receiver.playoutDelayHint = 0
-        } else {
-            this.logger?.debug(`playoutDelayHint not supported in receiver: ${event.receiver.track.label}`)
-        }
-
         if (track.kind == "video") {
             this.videoReceiver = event.receiver
         }
@@ -270,8 +284,6 @@ export class WebRTCTransport implements Transport {
         this.logger?.debug(`Adding receiver: ${track.kind}, ${track.id}, ${track.label}`)
 
         if (track.kind == "video") {
-            event.receiver.jitterBufferTarget = 0
-
             if ("contentHint" in track) {
                 track.contentHint = "motion"
             }
@@ -282,8 +294,6 @@ export class WebRTCTransport implements Transport {
             }
             this.videoTrackHolder.ontrack()
         } else if (track.kind == "audio") {
-            // no jitterBufferTarget because Audio cracks, which we don't want
-
             this.audioTrackHolder.track = track
             if (!this.audioTrackHolder.ontrack) {
                 throw "No audio track listener registered!"
