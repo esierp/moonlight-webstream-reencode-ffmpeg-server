@@ -44,9 +44,9 @@ const VIDEO_DECODER_CODECS: Array<{ key: string } & VideoDecoderConfig> = [
     // { key: "AV1_HIGH10_444", codec: "av01.0.08M.10", colorSpace: { primaries: "bt709", matrix: "bt709", transfer: "bt709", fullRange: true } }
 ]
 
-export function getStandardVideoFormats() {
+export function emptyVideoFormats(): VideoCodecSupport {
     return {
-        H264: true,              // assumed universal
+        H264: false,
         H264_HIGH8_444: false,
         H265: false,
         H265_MAIN10: false,
@@ -57,6 +57,25 @@ export function getStandardVideoFormats() {
         AV1_HIGH8_444: false,
         AV1_HIGH10_444: false
     }
+}
+
+export function getStandardVideoFormats(): VideoCodecSupport {
+    const codecs = emptyVideoFormats()
+
+    // assumed universal
+    codecs.H264 = true
+
+    return codecs
+}
+
+export function hasAnyCodec(codecs: VideoCodecSupport): boolean {
+    for (const key in codecs) {
+        if (codecs[key]) {
+            return true
+        }
+    }
+
+    return false
 }
 
 export async function getSupportedVideoFormats(): Promise<VideoCodecSupport> {

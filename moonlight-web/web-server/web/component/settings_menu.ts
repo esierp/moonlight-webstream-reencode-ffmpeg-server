@@ -15,7 +15,8 @@ export type StreamSettings = {
         height: number
     },
     fps: number
-    dontForceH264: boolean
+    videoCodec: StreamCodec,
+    videoForceCodec: boolean,
     canvasRenderer: boolean
     playAudioLocal: boolean
     audioSampleQueueSize: number
@@ -23,6 +24,8 @@ export type StreamSettings = {
     controllerConfig: ControllerConfig
     toggleFullscreenWithKeybind: boolean
 }
+
+export type StreamCodec = "h264" | "auto" | "h265" | "av1"
 
 export function defaultStreamSettings(): StreamSettings {
     return {
@@ -36,7 +39,8 @@ export function defaultStreamSettings(): StreamSettings {
             width: 1920,
             height: 1080,
         },
-        dontForceH264: false,
+        videoCodec: "h264",
+        videoForceCodec: false,
         canvasRenderer: false,
         playAudioLocal: false,
         audioSampleQueueSize: 20,
@@ -84,7 +88,8 @@ export class StreamSettingsComponent implements Component {
     private bitrate: InputComponent
     private packetSize: InputComponent
     private fps: InputComponent
-    private forceH264: InputComponent
+    private videoCodec: SelectComponent
+    private videoForceCodec: InputComponent
     private canvasRenderer: InputComponent
 
     private videoSize: SelectComponent
@@ -206,13 +211,25 @@ export class StreamSettingsComponent implements Component {
         this.videoSampleQueueSize.addChangeListener(this.onSettingsChange.bind(this))
         this.videoSampleQueueSize.mount(this.divElement)
 
-        // Force H264
-        this.forceH264 = new InputComponent("dontForceH264", "checkbox", "Select Codec based on Support in Browser (Experimental)", {
-            defaultValue: defaultSettings.dontForceH264.toString(),
-            checked: settings?.dontForceH264
+        // Codec
+        this.videoCodec = new SelectComponent("videoCodec", [
+            { value: "h264", name: "H264" },
+            { value: "auto", name: "Auto (Experimental)" },
+            { value: "h265", name: "H265" },
+            { value: "av1", name: "AV1 (Experimental)" },
+        ], {
+            displayName: "Video Codec",
+            preSelectedOption: settings?.videoCodec ?? defaultSettings.videoCodec
         })
-        this.forceH264.addChangeListener(this.onSettingsChange.bind(this))
-        this.forceH264.mount(this.divElement)
+        this.videoCodec.addChangeListener(this.onSettingsChange.bind(this))
+        this.videoCodec.mount(this.divElement)
+
+        // Force Codec
+        this.videoForceCodec = new InputComponent("videoForceCodec", "checkbox", "Force Video Codec", {
+            checked: settings?.videoForceCodec ?? defaultSettings.videoForceCodec
+        })
+        this.videoForceCodec.addChangeListener(this.onSettingsChange.bind(this))
+        this.videoForceCodec.mount(this.divElement)
 
         // Use Canvas Renderer
         this.canvasRenderer = new InputComponent("canvasRenderer", "checkbox", "Use Canvas Renderer (Experimental)", {
@@ -341,7 +358,8 @@ export class StreamSettingsComponent implements Component {
             height: parseInt(this.videoSizeHeight.getValue())
         }
         settings.videoFrameQueueSize = parseInt(this.videoSampleQueueSize.getValue())
-        settings.dontForceH264 = this.forceH264.isChecked()
+        settings.videoCodec = this.videoCodec.getValue() as any
+        settings.videoForceCodec = this.videoForceCodec.isChecked()
         settings.canvasRenderer = this.canvasRenderer.isChecked()
 
         settings.playAudioLocal = this.playAudioLocal.isChecked()
