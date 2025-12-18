@@ -12,7 +12,10 @@ use moonlight_common::stream::{
     video::{VideoDecoder, VideoSetup},
 };
 
-use crate::{StreamConnection, transport::OutboundPacket};
+use crate::{
+    StreamConnection,
+    transport::{OutboundPacket, TransportError},
+};
 
 pub(crate) struct StreamVideoDecoder {
     pub(crate) stream: Weak<StreamConnection>,
@@ -147,7 +150,7 @@ impl VideoStats {
                 let transport = stream.transport_sender.lock().await;
 
                 // Send Video info
-                transport
+                match transport
                     .send(OutboundPacket::Stats(StreamerStatsUpdate::Video {
                         host_processing_latency: has_host_processing_latency.then_some(
                             StatsHostProcessingLatency {
@@ -170,7 +173,15 @@ impl VideoStats {
                             * 1000.0,
                     }))
                     .await
-                    .unwrap();
+                {
+                    Ok(_) => {}
+                    Err(TransportError::ChannelClosed) => {
+                        // ignore
+                    }
+                    Err(err) => {
+                        warn!("Failed to send stats: {err:?}");
+                    }
+                };
                 drop(transport);
 
                 // Send RTT info
@@ -183,13 +194,21 @@ impl VideoStats {
 
                     match rtt {
                         Ok(EstimatedRttInfo { rtt, rtt_variance }) => {
-                            transport
+                            match transport
                                 .send(OutboundPacket::Stats(StreamerStatsUpdate::Rtt {
                                     rtt_ms: rtt.as_secs_f64() * 1000.0,
                                     rtt_variance_ms: rtt_variance.as_secs_f64() * 1000.0,
                                 }))
                                 .await
-                                .unwrap();
+                            {
+                                Ok(_) => {}
+                                Err(TransportError::ChannelClosed) => {
+                                    // ignore
+                                }
+                                Err(err) => {
+                                    warn!("Failed to send stats: {err:?}");
+                                }
+                            };
                         }
                         Err(err) => {
                             warn!("failed to get estimated rtt info: {err:?}");

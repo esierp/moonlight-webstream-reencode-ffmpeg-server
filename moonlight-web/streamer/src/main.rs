@@ -17,7 +17,7 @@ use common::{
         create_process_ipc,
     },
 };
-use log::{LevelFilter, debug, info, warn};
+use log::{LevelFilter, debug, error, info, warn};
 use moonlight_common::{
     MoonlightError,
     high::{HostError, MoonlightHost},
@@ -260,23 +260,49 @@ impl StreamConnection {
                         }
                         Ok(TransportEvent::StartStream { settings }) => {
                             // TODO: set settings
-                            let this = this.upgrade().unwrap();
+                            let Some(this) = this.upgrade() else {
+                                warn!(
+                                    "Failed to get stream connection, stopping listening to events"
+                                );
+                                return;
+                            };
 
-                            this.start_stream().await.unwrap();
+                            if let Err(err) = this.start_stream().await {
+                                error!("Failed to start stream, stopping: {err:?}");
+
+                                this.stop().await;
+                            }
                         }
                         Ok(TransportEvent::RecvPacket(packet)) => {
-                            let this = this.upgrade().unwrap();
+                            let Some(this) = this.upgrade() else {
+                                warn!(
+                                    "Failed to get stream connection, stopping listening to events"
+                                );
+                                return;
+                            };
 
                             this.on_packet(packet).await;
                         }
                         Err(TransportError::Closed) | Ok(TransportEvent::Closed) => {
-                            let this = this.upgrade().unwrap();
+                            let Some(this) = this.upgrade() else {
+                                warn!(
+                                    "Failed to get stream connection, stopping listening to events"
+                                );
+                                return;
+                            };
 
                             this.stop().await;
                             break;
                         }
+                        // It wouldn't make sense to return this
+                        Err(TransportError::ChannelClosed) => unreachable!(),
                         Err(TransportError::Implementation(err)) => {
-                            let this = this.upgrade().unwrap();
+                            let Some(this) = this.upgrade() else {
+                                warn!(
+                                    "Failed to get stream connection, stopping listening to events"
+                                );
+                                return;
+                            };
 
                             info!(
                                 "Stopping stream because of transport implementation error: {err}"
@@ -322,6 +348,7 @@ impl StreamConnection {
 
         let err = match packet {
             InboundPacket::General { message } => {
+                // TODO
                 todo!();
             }
             InboundPacket::MousePosition {
@@ -560,6 +587,12 @@ impl StreamConnection {
             stream.take()
         };
         drop(stream);
+
+        let transport = self.transport_sender.lock().await;
+        if let Err(err) = transport.close().await {
+            warn!("Error whilst closing transport: {err}");
+        }
+        drop(transport);
 
         let mut ipc_sender = self.ipc_sender.clone();
         ipc_sender.send(StreamerIpcMessage::Stop).await;

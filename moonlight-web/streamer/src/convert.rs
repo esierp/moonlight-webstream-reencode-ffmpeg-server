@@ -25,14 +25,6 @@ pub fn into_webrtc_ice(value: RtcIceServer) -> RTCIceServer {
         credential: value.credential,
     }
 }
-pub fn from_webrtc_ice(value: RTCIceServer) -> RtcIceServer {
-    RtcIceServer {
-        is_default: false,
-        urls: value.urls,
-        username: value.username,
-        credential: value.credential,
-    }
-}
 
 pub fn into_webrtc_ice_candidate(value: WebRtcNat1To1IceCandidateType) -> RTCIceCandidateType {
     match value {

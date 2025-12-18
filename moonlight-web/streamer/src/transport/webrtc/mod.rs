@@ -1,7 +1,7 @@
 use std::{
     future::ready,
     pin::Pin,
-    sync::{Arc, Weak, atomic::AtomicBool},
+    sync::{Arc, Weak},
     time::{Duration, Instant},
 };
 
@@ -16,7 +16,7 @@ use common::{
     config::{PortRange, WebRtcConfig},
     ipc::{ServerIpcMessage, StreamerIpcMessage},
 };
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use moonlight_common::stream::{
     bindings::{AudioConfig, DecodeResult, OpusMultistreamConfig, VideoDecodeUnit},
     video::VideoSetup,
@@ -71,7 +71,6 @@ mod sender;
 mod video;
 
 struct WebRtcInner {
-    runtime: Handle,
     peer: Arc<RTCPeerConnection>,
     stream_settings: StreamSettings,
     event_sender: Sender<TransportEvent>,
@@ -82,7 +81,6 @@ struct WebRtcInner {
     audio: Mutex<WebRtcAudio>,
     // Timeout / Terminate
     pub timeout_terminate_request: Mutex<Option<Instant>>,
-    pub is_terminating: AtomicBool,
 }
 
 pub async fn new(
@@ -151,14 +149,18 @@ pub async fn new(
     let (event_sender, event_receiver) = channel::<TransportEvent>(20);
 
     // Send WebRTC Info
-    event_sender
+    if let Err(err) = event_sender
         .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
             StreamServerMessage::Setup {
                 ice_servers: config.ice_servers.clone(),
             },
         )))
         .await
-        .unwrap();
+    {
+        error!(
+            "Failed to send WebRTC setup message, the client peer will likely not get created: {err:?}"
+        );
+    };
 
     let peer = Arc::new(api.new_peer_connection(rtc_config).await?);
 
@@ -166,7 +168,6 @@ pub async fn new(
 
     let runtime = Handle::current();
     let this_owned = Arc::new(WebRtcInner {
-        runtime: runtime.clone(),
         peer: peer.clone(),
         stream_settings: stream_settings.clone(),
         event_sender,
@@ -183,7 +184,6 @@ pub async fn new(
             Arc::downgrade(&peer),
             stream_settings.audio_sample_queue_size as usize,
         )),
-        is_terminating: AtomicBool::new(false),
         timeout_terminate_request: Mutex::new(None),
     });
 
@@ -230,6 +230,7 @@ pub async fn new(
 }
 
 // It compiling...
+#[allow(clippy::complexity)]
 fn create_event_handler<F, Args>(
     inner: Weak<WebRtcInner>,
     f: F,
@@ -260,6 +261,7 @@ where
                 + 'static,
         >
 }
+#[allow(clippy::complexity)]
 fn create_channel_message_handler(
     inner: Weak<WebRtcInner>,
     channel: TransportChannel,
@@ -274,11 +276,13 @@ fn create_channel_message_handler(
             return;
         };
 
-        inner
+        if let Err(err) = inner
             .event_sender
             .send(TransportEvent::RecvPacket(packet))
             .await
-            .unwrap();
+        {
+            warn!("Failed to dispatch RecvPacket event: {err:?}");
+        };
     })
 }
 
@@ -288,17 +292,20 @@ impl WebRtcInner {
     async fn on_peer_connection_state_change(self: Arc<Self>, state: RTCPeerConnectionState) {
         #[allow(clippy::collapsible_if)]
         if matches!(state, RTCPeerConnectionState::Connected) {
-            self.event_sender
+            if let Err(err) = self
+                .event_sender
                 .send(TransportEvent::StartStream {
                     settings: self.stream_settings.clone(),
                 })
                 .await
-                .unwrap();
+            {
+                warn!("Failed to send peer connected event to stream: {err:?}");
+            }
         } else if matches!(state, RTCPeerConnectionState::Closed) {
-            self.event_sender
-                .send(TransportEvent::Closed)
-                .await
-                .unwrap();
+            if let Err(err) = self.event_sender.send(TransportEvent::Closed).await {
+                warn!("Failed to send peer closed event to stream: {err:?}");
+                self.request_terminate().await;
+            };
         } else if matches!(
             state,
             RTCPeerConnectionState::Failed | RTCPeerConnectionState::Disconnected
@@ -333,7 +340,8 @@ impl WebRtcInner {
             local_description.sdp
         );
 
-        self.event_sender
+        if let Err(err) = self
+            .event_sender
             .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
                 StreamServerMessage::WebRtc(StreamSignalingMessage::Description(
                     RtcSessionDescription {
@@ -343,7 +351,9 @@ impl WebRtcInner {
                 )),
             )))
             .await
-            .unwrap();
+        {
+            warn!("Failed to send local description (answer) via web socket from peer: {err:?}");
+        }
 
         true
     }
@@ -370,7 +380,8 @@ impl WebRtcInner {
             local_description.sdp
         );
 
-        self.event_sender
+        if let Err(err) = self
+            .event_sender
             .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
                 StreamServerMessage::WebRtc(StreamSignalingMessage::Description(
                     RtcSessionDescription {
@@ -380,7 +391,9 @@ impl WebRtcInner {
                 )),
             )))
             .await
-            .unwrap();
+        {
+            warn!("Failed to send local description (offer) via web socket from peer: {err:?}");
+        };
 
         true
     }
@@ -462,12 +475,15 @@ impl WebRtcInner {
                 username_fragment: candidate_json.username_fragment,
             }));
 
-        self.event_sender
+        if let Err(err) = self
+            .event_sender
             .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
                 message,
             )))
             .await
-            .unwrap();
+        {
+            error!("Failed to send web socket message from peer: {err:?}");
+        };
     }
 
     async fn on_data_channel(self: Arc<Self>, channel: Arc<RTCDataChannel>) {
@@ -560,10 +576,9 @@ impl WebRtcInner {
                 && (now - terminate_request) > TIMEOUT_DURATION
             {
                 info!("Stopping because of timeout");
-                this.event_sender
-                    .send(TransportEvent::Closed)
-                    .await
-                    .unwrap();
+                if let Err(err) = this.event_sender.send(TransportEvent::Closed).await {
+                    warn!("Failed to send that the peer should close: {err:?}");
+                };
             }
         });
     }
@@ -638,18 +653,30 @@ impl TransportSender for WebRTCTransportSender {
         let bytes = bytes.slice(range);
 
         match channel.0 {
-            TransportChannelId::GENERAL => {
-                self.inner.general_channel.send(&bytes).await.unwrap();
-            }
+            TransportChannelId::GENERAL => match self.inner.general_channel.send(&bytes).await {
+                Ok(_) => {}
+                Err(webrtc::Error::ErrDataChannelNotOpen) => {
+                    return Err(TransportError::ChannelClosed);
+                }
+                _ => {}
+            },
             TransportChannelId::STATS => {
-                // TODO: this should return channel close instead of silent failure
                 let stats = self.inner.stats_channel.lock().await;
                 if let Some(stats) = stats.as_ref() {
-                    stats.send(&bytes).await.unwrap();
+                    match stats.send(&bytes).await {
+                        Ok(_) => {}
+                        Err(webrtc::Error::ErrDataChannelNotOpen) => {
+                            return Err(TransportError::ChannelClosed);
+                        }
+                        _ => {}
+                    }
+                } else {
+                    return Err(TransportError::ChannelClosed);
                 }
             }
             _ => {
                 warn!("Cannot send data on channel {channel:?}");
+                return Err(TransportError::ChannelClosed);
             }
         }
         Ok(())
@@ -670,8 +697,5 @@ impl TransportSender for WebRTCTransportSender {
             .map_err(|err| TransportError::Implementation(err.into()))?;
 
         Ok(())
-    }
-    fn is_closed(&self) -> bool {
-        todo!()
     }
 }

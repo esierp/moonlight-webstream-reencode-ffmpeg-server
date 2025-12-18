@@ -25,13 +25,6 @@ impl<T> ByteBuffer<T> {
     }
 }
 
-impl<'a> ByteBuffer<&'a mut [u8]> {
-    pub fn into_mut(self) -> &'a mut [u8] {
-        let (buffer, range) = self.into_raw();
-        &mut buffer[range]
-    }
-}
-
 #[allow(unused)]
 impl<T> ByteBuffer<T>
 where

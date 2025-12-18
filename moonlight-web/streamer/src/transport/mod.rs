@@ -30,6 +30,8 @@ pub struct TransportChannel(pub u8);
 
 #[derive(Debug, Error)]
 pub enum TransportError {
+    #[error("the channel was closed")]
+    ChannelClosed,
     #[error("the transport was closed")]
     Closed,
     #[error("implementation: {0}")]
@@ -492,6 +494,5 @@ pub trait TransportSender {
 
     async fn on_ipc_message(&self, message: ServerIpcMessage) -> Result<(), TransportError>;
 
-    fn is_closed(&self) -> bool;
     async fn close(&self) -> Result<(), TransportError>;
 }
