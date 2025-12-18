@@ -76,8 +76,8 @@ struct WebRtcInner {
     event_sender: Sender<TransportEvent>,
     general_channel: Arc<RTCDataChannel>,
     // TODO: use negotiated channels -> no rwlock required
-    video: Mutex<Option<WebRtcVideo>>,
-    audio: Mutex<Option<WebRtcAudio>>,
+    video: Mutex<WebRtcVideo>,
+    audio: Mutex<WebRtcAudio>,
     // Timeout / Terminate
     pub timeout_terminate_request: Mutex<Option<Instant>>,
     pub is_terminating: AtomicBool,
@@ -162,32 +162,27 @@ pub async fn new(
 
     let general_channel = peer.create_data_channel("general", None).await?;
 
+    let runtime = Handle::current();
     let this_owned = Arc::new(WebRtcInner {
-        runtime: Handle::current(),
+        runtime: runtime.clone(),
         peer: peer.clone(),
         stream_settings: stream_settings.clone(),
         event_sender,
         general_channel,
-        video: Default::default(),
-        audio: Default::default(),
+        video: Mutex::new(WebRtcVideo::new(
+            runtime.clone(),
+            Arc::downgrade(&peer),
+            stream_settings.video_supported_formats,
+            stream_settings.video_frame_queue_size as usize,
+        )),
+        audio: Mutex::new(WebRtcAudio::new(
+            runtime,
+            Arc::downgrade(&peer),
+            stream_settings.audio_sample_queue_size as usize,
+        )),
         is_terminating: AtomicBool::new(false),
         timeout_terminate_request: Mutex::new(None),
     });
-    {
-        let mut video = this_owned.video.lock().await;
-        *video = Some(WebRtcVideo::new(
-            Arc::downgrade(&this_owned),
-            stream_settings.video_supported_formats,
-            stream_settings.video_frame_queue_size as usize,
-        ));
-    }
-    {
-        let mut audio = this_owned.audio.lock().await;
-        *audio = Some(WebRtcAudio::new(
-            Arc::downgrade(&this_owned),
-            stream_settings.audio_sample_queue_size as usize,
-        ));
-    }
 
     let this = Arc::downgrade(&this_owned);
 
@@ -593,7 +588,7 @@ pub struct WebRTCTransportSender {
 impl TransportSender for WebRTCTransportSender {
     async fn setup_video(&self, setup: VideoSetup) -> i32 {
         let mut video = self.inner.video.lock().await;
-        if video.as_mut().unwrap().setup(setup).await {
+        if video.setup(&self.inner, setup).await {
             0
         } else {
             -1
@@ -604,7 +599,7 @@ impl TransportSender for WebRTCTransportSender {
         unit: VideoDecodeUnit<'a>,
     ) -> Result<DecodeResult, TransportError> {
         let mut video = self.inner.video.lock().await;
-        Ok(video.as_mut().unwrap().send_decode_unit(&unit).await)
+        Ok(video.send_decode_unit(&unit).await)
     }
 
     async fn setup_audio(
@@ -614,16 +609,12 @@ impl TransportSender for WebRTCTransportSender {
     ) -> i32 {
         let mut audio = self.inner.audio.lock().await;
 
-        audio
-            .as_mut()
-            .unwrap()
-            .setup(audio_config, stream_config)
-            .await
+        audio.setup(&self.inner, audio_config, stream_config).await
     }
     async fn send_audio_sample(&self, data: &[u8]) -> Result<(), TransportError> {
         let mut audio = self.inner.audio.lock().await;
 
-        audio.as_mut().unwrap().send_audio_sample(data).await;
+        audio.send_audio_sample(data).await;
 
         Ok(())
     }

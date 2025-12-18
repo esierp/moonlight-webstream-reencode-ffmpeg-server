@@ -18,8 +18,10 @@ use moonlight_common::stream::{
     },
     video::{PullVideoManager, VideoSetup},
 };
+use tokio::runtime::{Handle, Runtime};
 use webrtc::{
     api::media_engine::{MIME_TYPE_AV1, MIME_TYPE_H264, MIME_TYPE_HEVC, MediaEngine},
+    peer_connection::RTCPeerConnection,
     rtcp::payload_feedbacks::{
         picture_loss_indication::PictureLossIndication,
         receiver_estimated_maximum_bitrate::ReceiverEstimatedMaximumBitrate,
@@ -80,14 +82,15 @@ pub struct WebRtcVideo {
 
 impl WebRtcVideo {
     pub fn new(
-        inner: Weak<WebRtcInner>,
+        runtime: Handle,
+        peer: Weak<RTCPeerConnection>,
         supported_video_formats: SupportedVideoFormats,
         frame_queue_size: usize,
     ) -> Self {
         Self {
             clock_rate: 0,
             needs_idr: Default::default(),
-            sender: TrackLocalSender::new(inner, frame_queue_size),
+            sender: TrackLocalSender::new(runtime, peer, frame_queue_size),
             codec: None,
             supported_video_formats,
             samples: Default::default(),
@@ -96,6 +99,7 @@ impl WebRtcVideo {
 
     pub async fn setup(
         &mut self,
+        inner: &WebRtcInner,
         VideoSetup {
             format,
             width,
@@ -183,11 +187,9 @@ impl WebRtcVideo {
         };
 
         // Renegotiate
-        let inner = self.sender.inner.upgrade().unwrap();
-        inner
-            .runtime
-            .clone()
-            .spawn(async move { inner.send_offer().await });
+        if !inner.send_offer().await {
+            warn!("Failed to renegotiate. Video was added!");
+        }
 
         true
     }

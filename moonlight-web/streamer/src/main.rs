@@ -824,7 +824,7 @@ impl AudioDecoder for StreamAudioDecoder {
         };
 
         stream.runtime.clone().block_on(async move {
-            let mut stream = stream.transport_sender.lock().await;
+            let stream = stream.transport_sender.lock().await;
             if let Err(err) = stream.send_audio_sample(data).await {
                 warn!("Failed to send audio sample: {err}");
             }

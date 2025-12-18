@@ -7,11 +7,12 @@ use std::{
 use anyhow::anyhow;
 use log::{debug, warn};
 use tokio::{
+    runtime::{Handle, Runtime},
     sync::{Mutex, Notify},
-    task::{block_in_place, spawn_blocking},
 };
 use webrtc::{
     media::Sample,
+    peer_connection::RTCPeerConnection,
     rtcp::packet::Packet,
     rtp::{
         self,
@@ -26,14 +27,13 @@ use webrtc::{
     },
 };
 
-use crate::transport::webrtc::WebRtcInner;
-
 pub struct TrackLocalSender<Track>
 where
     Track: TrackLike,
 {
+    runtime: Handle,
+    peer: Weak<RTCPeerConnection>,
     channel_queue_size: usize,
-    pub(crate) inner: Weak<WebRtcInner>,
     new_samples_notify: Arc<Notify>,
     queue: Arc<Mutex<VecDeque<FrameSamples<Track>>>>,
 }
@@ -50,10 +50,11 @@ impl<Track> TrackLocalSender<Track>
 where
     Track: TrackLike,
 {
-    pub fn new(inner: Weak<WebRtcInner>, channel_queue_size: usize) -> Self {
+    pub fn new(runtime: Handle, peer: Weak<RTCPeerConnection>, channel_queue_size: usize) -> Self {
         Self {
+            runtime,
+            peer,
             channel_queue_size,
-            inner,
             new_samples_notify: Default::default(),
             queue: Default::default(),
         }
@@ -63,18 +64,11 @@ where
     pub async fn create_track(
         &mut self,
         track: Track,
-        on_packet: impl FnMut(Box<dyn Packet + Send + Sync>) + Send + 'static,
-    ) -> Result<(), anyhow::Error> {
-        block_in_place(|| self.blocking_create_track(track, on_packet))
-    }
-    pub fn blocking_create_track(
-        &mut self,
-        track: Track,
         mut on_packet: impl FnMut(Box<dyn Packet + Send + Sync>) + Send + 'static,
     ) -> Result<(), anyhow::Error> {
-        let Some(inner) = self.inner.upgrade() else {
+        let Some(peer) = self.peer.upgrade() else {
             return Err(anyhow!(
-                "Failed to create track because of missing webrtc transport!"
+                "Failed to create track because of missing webrtc peer!"
             ));
         };
 
@@ -82,23 +76,19 @@ where
 
         let new_samples_notify = self.new_samples_notify.clone();
         let queue = Arc::downgrade(&self.queue);
-        inner.runtime.spawn({
+        self.runtime.spawn({
             let track = track.clone();
             async move {
                 sample_sender(track, &new_samples_notify, queue).await;
             }
         });
 
-        let track_sender = inner.runtime.block_on({
-            let inner = inner.clone();
-            let track = track.clone();
-            async move { inner.peer.add_track(track.track()).await }
-        })?;
+        let track_sender = peer.add_track(track.track()).await?;
 
         // Read incoming RTCP packets
         // Before these packets are returned they are processed by interceptors. For things
         // like NACK this needs to be called.
-        inner.runtime.spawn(async move {
+        self.runtime.spawn(async move {
             let mut rtcp_buf = vec![0u8; 1500];
             while let Ok((packets, _)) = track_sender.read(&mut rtcp_buf).await {
                 for packet in packets {
@@ -129,9 +119,6 @@ where
         self.new_samples_notify.notify_waiters();
 
         result
-    }
-    pub fn blocking_send_samples(&self, samples: Vec<Track::Sample>, important: bool) -> bool {
-        todo!()
     }
 
     /// Returns if the frame will be delivered

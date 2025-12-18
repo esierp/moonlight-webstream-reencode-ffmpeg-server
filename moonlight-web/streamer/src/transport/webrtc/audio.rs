@@ -3,9 +3,11 @@ use std::{sync::Weak, time::Duration};
 use bytes::Bytes;
 use log::{error, warn};
 use moonlight_common::stream::bindings::{AudioConfig, OpusMultistreamConfig};
+use tokio::runtime::Handle;
 use webrtc::{
     api::media_engine::{MIME_TYPE_OPUS, MediaEngine},
     media::Sample,
+    peer_connection::RTCPeerConnection,
     rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTCRtpCodecParameters, RTPCodecType},
     track::track_local::track_local_static_sample::TrackLocalStaticSample,
 };
@@ -37,9 +39,9 @@ pub struct WebRtcAudio {
 }
 
 impl WebRtcAudio {
-    pub fn new(inner: Weak<WebRtcInner>, channel_queue_size: usize) -> Self {
+    pub fn new(runtime: Handle, peer: Weak<RTCPeerConnection>, channel_queue_size: usize) -> Self {
         Self {
-            sender: TrackLocalSender::new(inner, channel_queue_size),
+            sender: TrackLocalSender::new(runtime, peer, channel_queue_size),
             config: None,
         }
     }
@@ -48,6 +50,7 @@ impl WebRtcAudio {
 impl WebRtcAudio {
     pub async fn setup(
         &mut self,
+        inner: &WebRtcInner,
         audio_config: AudioConfig,
         stream_config: OpusMultistreamConfig,
     ) -> i32 {
@@ -87,11 +90,9 @@ impl WebRtcAudio {
         self.config = Some(stream_config);
 
         // Renegotiate
-        let inner = self.sender.inner.upgrade().unwrap();
-        inner
-            .runtime
-            .clone()
-            .spawn(async move { inner.send_offer().await });
+        if !inner.send_offer().await {
+            warn!("Failed to renegotiate. Audio was added!");
+        }
 
         0
     }
