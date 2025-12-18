@@ -328,15 +328,16 @@ impl InboundPacket {
                 }
             }
             TransportChannel(channel_id)
-                if let Some(id) = Self::CONTROLLER_CHANNELS
+                if let Some((gamepad_id, _)) = Self::CONTROLLER_CHANNELS
                     .iter()
-                    .find(|cmp_channel_id| **cmp_channel_id == channel_id) =>
+                    .enumerate()
+                    .find(|(_, cmp_channel_id)| **cmp_channel_id == channel_id) =>
             {
                 let ty = buffer.get_u8();
                 if ty == 0 {
                     let Some(buttons) = ControllerButtons::from_bits(buffer.get_u32()) else {
                         warn!(
-                            "[InboundPacket]: received invalid controller buttons for controller {id}"
+                            "[InboundPacket]: received invalid controller buttons for controller {gamepad_id}"
                         );
                         return None;
                     };
@@ -349,7 +350,7 @@ impl InboundPacket {
                     let right_stick_y = buffer.get_i16();
 
                     Some(InboundPacket::ControllerState {
-                        id: *id,
+                        id: gamepad_id as u8,
                         buttons,
                         left_trigger,
                         right_trigger,

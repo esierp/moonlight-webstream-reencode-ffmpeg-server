@@ -28,8 +28,8 @@ use moonlight_common::{
         audio::AudioDecoder,
         bindings::{
             ActiveGamepads, AudioConfig, Capabilities, ColorRange, ConnectionStatus,
-            EncryptionFlags, HostFeatures, OpusMultistreamConfig, Stage, SupportedVideoFormats,
-            VideoFormat,
+            ControllerButtons, EncryptionFlags, HostFeatures, OpusMultistreamConfig, Stage,
+            SupportedVideoFormats, VideoFormat,
         },
         connection::ConnectionListener,
         video::VideoSetup,
@@ -219,6 +219,7 @@ struct StreamConnection {
     pub stream_info: Mutex<Option<VideoSetup>>,
     // Stream
     pub stream: RwLock<Option<MoonlightStream>>,
+    pub active_gamepads: RwLock<ActiveGamepads>,
     pub transport_sender: Mutex<Box<dyn TransportSender + Send + Sync>>,
     pub terminate: Notify,
     is_terminating: AtomicBool,
@@ -243,6 +244,7 @@ impl StreamConnection {
             ipc_sender,
             stream_info: Mutex::new(None),
             stream: RwLock::new(None),
+            active_gamepads: RwLock::new(ActiveGamepads::empty()),
             transport_sender: Mutex::new(Box::new(sender)),
             terminate: Notify::default(),
             is_terminating: AtomicBool::new(false),
@@ -421,12 +423,47 @@ impl StreamConnection {
                 supported_buttons,
                 capabilities,
             } => {
-                // TODO
-                todo!();
+                let Some(gamepad) = ActiveGamepads::from_id(id) else {
+                    warn!("Failed to add gamepad because it is out of range: {id}");
+                    return;
+                };
+
+                let mut active_gamepads = self.active_gamepads.write().await;
+
+                active_gamepads.insert(gamepad);
+
+                stream
+                    .send_controller_arrival(
+                        id,
+                        *active_gamepads,
+                        ty,
+                        supported_buttons,
+                        capabilities,
+                    )
+                    .err()
             }
             InboundPacket::ControllerDisconnected { id } => {
-                // TODO
-                todo!();
+                let Some(gamepad) = ActiveGamepads::from_id(id) else {
+                    warn!("Failed to remove gamepad because it is out of range: {id}");
+                    return;
+                };
+
+                let mut active_gamepads = self.active_gamepads.write().await;
+                active_gamepads.remove(gamepad);
+
+                stream
+                    .send_multi_controller(
+                        id,
+                        *active_gamepads,
+                        ControllerButtons::empty(),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    )
+                    .err()
             }
             InboundPacket::ControllerState {
                 id,
@@ -438,8 +475,33 @@ impl StreamConnection {
                 right_stick_x,
                 right_stick_y,
             } => {
-                // TODO
-                todo!();
+                let Some(gamepad) = ActiveGamepads::from_id(id) else {
+                    warn!("Failed to update gamepad state because it is out of range: {id}");
+                    return;
+                };
+
+                let active_gamepads = self.active_gamepads.read().await;
+                if !active_gamepads.contains(gamepad) {
+                    warn!(
+                        "Failed to send gamepad event for not registered gamepad, gamepad: {id}, currently active: {:?}",
+                        *active_gamepads
+                    );
+                    return;
+                }
+
+                stream
+                    .send_multi_controller(
+                        id,
+                        *active_gamepads,
+                        buttons,
+                        left_trigger,
+                        right_trigger,
+                        left_stick_x,
+                        left_stick_y,
+                        right_stick_x,
+                        right_stick_y,
+                    )
+                    .err()
             }
         };
 
