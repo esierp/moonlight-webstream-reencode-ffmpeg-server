@@ -4,5 +4,8 @@
 //! - HEVC in WebRTC: https://datatracker.ietf.org/doc/html/draft-ietf-avtcore-hevc-webrtc-06#page-4
 //! - Pion issues: https://github.com/pion/webrtc/issues/3137
 
+// Don't use the custom impl
+#[allow(unused)]
 pub mod payloader;
+
 pub mod reader;
