@@ -126,7 +126,7 @@ export class ByteBuffer {
         return this.position
     }
 
-    getReadBuffer(): Uint8Array {
-        return this.buffer.slice(0, this.limit)
+    getRemainingBuffer(): Uint8Array {
+        return this.buffer.slice(this.position, this.limit)
     }
 }

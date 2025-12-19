@@ -26,7 +26,7 @@ function trySendChannel(channel: DataTransportChannel | null, buffer: ByteBuffer
     }
 
     buffer.flip()
-    const readBuffer = buffer.getReadBuffer()
+    const readBuffer = buffer.getRemainingBuffer()
     if (readBuffer.length == 0) {
         throw "illegal buffer size"
     }

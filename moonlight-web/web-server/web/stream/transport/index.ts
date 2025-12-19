@@ -4,7 +4,8 @@ export type TransportChannelIdKey = keyof typeof TransportChannelId
 export type TransportChannelIdValue = typeof TransportChannelId[TransportChannelIdKey]
 
 export type TransportVideoType = "videotrack" // TrackTransportChannel
-    | "data" // TODO: Each packet represents a NALU, raw video via data channel
+    | "data" // Data like https://github.com/moonlight-stream/moonlight-common-c/blob/b126e481a195fdc7152d211def17190e3434bcce/src/Limelight.h#L298
+
 
 export type TransportVideoSetup = {
     // List containing all supported types, priority highest=0, lowest=biggest index
@@ -12,7 +13,8 @@ export type TransportVideoSetup = {
 }
 
 export type TransportAudioType = "audiotrack" // TrackTransportChannel
-    | "data" // TODO: what here? raw audio via data channels
+    | "data" // Data like https://github.com/moonlight-stream/moonlight-common-c/blob/b126e481a195fdc7152d211def17190e3434bcce/src/Limelight.h#L356
+
 
 export type TransportAudioSetup = {
     // List containing all supported types, priority highest=0, lowest=biggest index
@@ -100,5 +102,5 @@ export interface DataTransportChannel extends TransportChannelBase {
     removeReceiveListener(listener: (data: ArrayBuffer) => void): void
 
     send(message: ArrayBuffer): void
-    estimatedBufferedBytes(): number
+    estimatedBufferedBytes(): number | null
 }

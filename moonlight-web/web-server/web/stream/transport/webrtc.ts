@@ -303,13 +303,12 @@ export class WebRTCTransport implements Transport {
     }
 
     async setupHostVideo(_setup: TransportVideoSetup): Promise<void> {
-        if (!this.peer) {
-            this.logger?.debug("Failed to setup video without peer")
-            return
-        }
+        // TODO: check transport type
     }
 
-    async setupHostAudio(_setup: TransportAudioSetup): Promise<void> { }
+    async setupHostAudio(_setup: TransportAudioSetup): Promise<void> {
+        // TODO: check transport type
+    }
 
     getChannel(id: TransportChannelIdValue): TransportChannel {
         const channel = this.channels[id]

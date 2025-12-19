@@ -256,7 +256,11 @@ export class Stream implements Component {
     }
 
     async startConnection() {
-        await this.tryWebRTCTransport()
+        // TODO: allow to force transport
+
+        // await this.tryWebRTCTransport()
+
+        await this.tryWebSocketTransport()
     }
 
     private transport: Transport | null = null
@@ -270,6 +274,10 @@ export class Stream implements Component {
 
         this.input.setTransport(this.transport)
         this.stats.setTransport(this.transport)
+    }
+
+    private async tryWebSocketTransport() {
+
     }
     private async tryWebRTCTransport() {
         if (!this.iceServers) {

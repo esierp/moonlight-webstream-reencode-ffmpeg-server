@@ -213,7 +213,7 @@ export class StreamSettingsComponent implements Component {
 
         // Codec
         this.videoCodec = new SelectComponent("videoCodec", [
-            { value: "h264", name: "H264" },
+            { value: "h264", name: "H264 (Default)" },
             { value: "auto", name: "Auto (Experimental)" },
             { value: "h265", name: "H265" },
             { value: "av1", name: "AV1 (Experimental)" },
