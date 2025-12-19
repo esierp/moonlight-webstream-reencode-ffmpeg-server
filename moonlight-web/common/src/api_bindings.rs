@@ -443,10 +443,17 @@ pub enum StreamServerMessage {
     ConnectionTerminated {
         error_code: i32,
     },
-    ConnectionStatusUpdate {
-        status: ConnectionStatus,
-    },
 }
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub enum GeneralServerMessage {
+    ConnectionStatusUpdate { status: ConnectionStatus },
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
+pub enum GeneralClientMessage {}
 
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export, export_to = EXPORT_PATH)]

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use common::{
     StreamSettings,
     api_bindings::{
-        StreamClientMessage, StreamServerMessage, StreamerStatsUpdate, TransportChannelId,
+        GeneralClientMessage, GeneralServerMessage, StreamerStatsUpdate, TransportChannelId,
     },
     ipc::{ServerIpcMessage, StreamerIpcMessage},
 };
@@ -41,7 +41,7 @@ pub enum TransportError {
 #[derive(Debug)]
 pub enum InboundPacket {
     General {
-        message: StreamClientMessage,
+        message: GeneralClientMessage,
     },
     MouseMove {
         delta_x: i16,
@@ -371,7 +371,7 @@ impl InboundPacket {
 #[derive(Debug)]
 pub enum OutboundPacket {
     General {
-        message: StreamServerMessage,
+        message: GeneralServerMessage,
     },
     Stats(StreamerStatsUpdate),
     ControllerRumble {

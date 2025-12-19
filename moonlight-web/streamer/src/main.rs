@@ -12,6 +12,7 @@ use std::{
 
 use common::{
     StreamSettings,
+    api_bindings::GeneralServerMessage,
     ipc::{
         IpcReceiver, IpcSender, ServerIpcMessage, StreamerConfig, StreamerIpcMessage,
         create_process_ipc,
@@ -749,7 +750,7 @@ impl ConnectionListener for StreamConnectionListener {
             let sender = stream.transport_sender.lock().await;
             if let Err(err) = sender
                 .send(OutboundPacket::General {
-                    message: StreamServerMessage::ConnectionStatusUpdate {
+                    message: GeneralServerMessage::ConnectionStatusUpdate {
                         status: status.into(),
                     },
                 })

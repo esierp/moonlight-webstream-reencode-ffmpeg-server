@@ -189,12 +189,6 @@ export class Stream implements Component {
             })
 
             this.eventTarget.dispatchEvent(event)
-        } else if ("ConnectionStatusUpdate" in message) {
-            const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "connectionStatus", status: message.ConnectionStatusUpdate.status }
-            })
-
-            this.eventTarget.dispatchEvent(event)
         } else if ("UpdateApp" in message) {
             const event: InfoEvent = new CustomEvent("stream-info", {
                 detail: { type: "app", app: message.UpdateApp.app }
