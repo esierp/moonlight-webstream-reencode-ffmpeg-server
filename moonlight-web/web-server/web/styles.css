@@ -633,6 +633,7 @@ canvas.video-stream {
 
 .video-stats {
     cursor: default;
+    pointer-events: none;
 
     color: yellow;
 
