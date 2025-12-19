@@ -259,9 +259,10 @@ export class Stream implements Component {
         this.debugLog(`Using transport: ${this.settings.dataTransport}`)
 
         if (this.settings.dataTransport == "auto") {
+            // TODO: wait until transport failed(no connect) or was successful and return out of this fn
             await this.tryWebRTCTransport()
 
-            await this.tryWebSocketTransport()
+            // await this.tryWebSocketTransport()
         } else if (this.settings.dataTransport == "webrtc") {
             await this.tryWebRTCTransport()
         } else if (this.settings.dataTransport == "websocket") {
@@ -292,6 +293,10 @@ export class Stream implements Component {
     private async tryWebRTCTransport() {
         this.debugLog("Trying WebRTC transport")
 
+        this.sendWsMessage({
+            SetTransport: "WebRTC"
+        })
+
         if (!this.iceServers) {
             this.debugLog(`Failed to try WebRTC Transport: no ice servers available`)
             return
@@ -304,6 +309,8 @@ export class Stream implements Component {
             iceServers: this.iceServers
         })
         this.setTransport(transport)
+
+        // TODO: wait for closure
     }
 
     private async setupVideo(setup: VideoRendererSetup) {

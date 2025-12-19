@@ -466,6 +466,7 @@ impl OutboundPacket {
     }
 }
 
+#[derive(Debug)]
 pub enum TransportEvent {
     StartStream { settings: StreamSettings },
     RecvPacket(InboundPacket),

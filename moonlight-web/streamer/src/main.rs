@@ -12,7 +12,7 @@ use std::{
 
 use common::{
     StreamSettings,
-    api_bindings::GeneralServerMessage,
+    api_bindings::{GeneralServerMessage, StreamClientMessage, TransportType},
     ipc::{
         IpcReceiver, IpcSender, ServerIpcMessage, StreamerConfig, StreamerIpcMessage,
         create_process_ipc,
@@ -145,7 +145,7 @@ async fn main() {
     ipc_sender
         .send(StreamerIpcMessage::WebSocket(
             StreamServerMessage::StageStarting {
-                stage: "Setup WebRTC Peer".to_string(),
+                stage: "Waiting for Transport to negotiate".to_string(),
             },
         ))
         .await;
@@ -181,22 +181,11 @@ async fn main() {
     .await
     .expect("failed to create connection");
 
-    // Send stage
+    // Send Info for streamer
     ipc_sender
-        .send(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::StageComplete {
-                stage: "Setup WebRTC Peer".to_string(),
-            },
-        ))
-        .await;
-
-    // Send stage
-    ipc_sender
-        .send(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::StageStarting {
-                stage: "WebRTC Peer Negotiation".to_string(),
-            },
-        ))
+        .send(StreamerIpcMessage::WebSocket(StreamServerMessage::Setup {
+            ice_servers: connection.config.webrtc.ice_servers.clone(),
+        }))
         .await;
 
     // Wait for termination
@@ -214,6 +203,7 @@ struct StreamInfo {
 struct StreamConnection {
     pub runtime: Handle,
     pub moonlight: MoonlightInstance,
+    pub config: StreamerConfig,
     pub info: StreamInfo,
     pub settings: StreamSettings,
     pub ipc_sender: IpcSender<StreamerIpcMessage>,
@@ -239,6 +229,7 @@ impl StreamConnection {
         let this = Arc::new(Self {
             runtime: Handle::current(),
             moonlight,
+            config,
             info,
             settings,
             ipc_sender,
@@ -270,10 +261,6 @@ impl StreamConnection {
             }
         });
 
-        // TODO: remove this and make this into a client request
-        let (sender, events) = webrtc::new(this.settings.clone(), &config.webrtc).await?;
-        this.set_transport(Box::new(sender), Box::new(events)).await;
-
         Ok(this)
     }
 
@@ -295,7 +282,11 @@ impl StreamConnection {
 
             async move {
                 loop {
-                    match events.poll_event().await {
+                    debug!("Polling new transport event");
+                    let event = events.poll_event().await;
+                    debug!("Polled transport event: {event:?}");
+
+                    match event {
                         Ok(TransportEvent::SendIpc(message)) => {
                             ipc_sender.send(message).await;
                         }
@@ -550,9 +541,33 @@ impl StreamConnection {
         }
     }
 
-    async fn on_ipc_message(&self, message: ServerIpcMessage) {
-        let mut sender = self.transport_sender.lock().await;
+    async fn on_ipc_message(self: &Arc<StreamConnection>, message: ServerIpcMessage) {
+        if let ServerIpcMessage::WebSocket(StreamClientMessage::SetTransport(transport_type)) =
+            &message
+        {
+            match transport_type {
+                TransportType::WebRTC => {
+                    info!("Trying WebRTC transport");
 
+                    let (sender, events) =
+                        match webrtc::new(self.settings.clone(), &self.config.webrtc).await {
+                            Ok(value) => value,
+                            Err(err) => {
+                                // TODO: what now?
+                                todo!();
+                            }
+                        };
+                    self.set_transport(Box::new(sender), Box::new(events)).await;
+                }
+                TransportType::WebSocket => {
+                    info!("Trying Web Socket transport");
+
+                    todo!();
+                }
+            }
+        }
+
+        let mut sender = self.transport_sender.lock().await;
         if let Some(sender) = sender.as_mut() {
             if let Err(err) = sender.on_ipc_message(message).await {
                 warn!("Failed to send ipc message: {err:?}");

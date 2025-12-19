@@ -148,20 +148,6 @@ pub async fn new(
 
     let (event_sender, event_receiver) = channel::<TransportEvent>(20);
 
-    // Send WebRTC Info
-    if let Err(err) = event_sender
-        .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::Setup {
-                ice_servers: config.ice_servers.clone(),
-            },
-        )))
-        .await
-    {
-        error!(
-            "Failed to send WebRTC setup message, the client peer will likely not get created: {err:?}"
-        );
-    };
-
     let peer = Arc::new(api.new_peer_connection(rtc_config).await?);
 
     let general_channel = peer.create_data_channel("general", None).await?;
@@ -448,8 +434,7 @@ impl WebRtcInner {
                     warn!("[Signaling]: failed to add ice candidate: {err:?}");
                 }
             }
-            // This should already be done
-            StreamClientMessage::Init { .. } => {}
+            _ => {}
         }
     }
 
@@ -596,6 +581,7 @@ pub struct WebRTCTransportEvents {
 #[async_trait]
 impl TransportEvents for WebRTCTransportEvents {
     async fn poll_event(&mut self) -> Result<TransportEvent, TransportError> {
+        debug!("Polling WebRTCEvents");
         self.event_receiver
             .recv()
             .await
