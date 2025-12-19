@@ -207,6 +207,14 @@ class ViewerApp implements Component {
             // do nothing
         }
 
+        if (!settings.videoForceCodec) {
+            // TODO: make this and the standard supported video formats
+            supportedVideoFormats.H264 = true
+        } else {
+            // TODO: use logger
+            console.info(`Forcing the video codec!`)
+        }
+
         if (!hasAnyCodec(supportedVideoFormats)) {
             // TODO: use the logger and log via fatal
             throw "Couldn't find any supported video format. Change the codec option to H264 in the settings if you're unsure which codecs are supported."

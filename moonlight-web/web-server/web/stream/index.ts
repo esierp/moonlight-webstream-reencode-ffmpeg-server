@@ -256,11 +256,19 @@ export class Stream implements Component {
     }
 
     async startConnection() {
-        // TODO: allow to force transport
+        this.debugLog(`Using transport: ${this.settings.dataTransport}`)
 
-        // await this.tryWebRTCTransport()
+        if (this.settings.dataTransport == "auto") {
+            await this.tryWebRTCTransport()
 
-        await this.tryWebSocketTransport()
+            await this.tryWebSocketTransport()
+        } else if (this.settings.dataTransport == "webrtc") {
+            await this.tryWebRTCTransport()
+        } else if (this.settings.dataTransport == "websocket") {
+            await this.tryWebSocketTransport()
+        }
+
+        // TODO: handle failure
     }
 
     private transport: Transport | null = null
@@ -277,9 +285,13 @@ export class Stream implements Component {
     }
 
     private async tryWebSocketTransport() {
+        this.debugLog("Trying Web Socket transport")
 
+        // TODO
     }
     private async tryWebRTCTransport() {
+        this.debugLog("Trying WebRTC transport")
+
         if (!this.iceServers) {
             this.debugLog(`Failed to try WebRTC Transport: no ice servers available`)
             return

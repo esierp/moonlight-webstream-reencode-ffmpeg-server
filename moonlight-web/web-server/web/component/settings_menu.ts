@@ -22,10 +22,12 @@ export type StreamSettings = {
     audioSampleQueueSize: number
     mouseScrollMode: MouseScrollMode
     controllerConfig: ControllerConfig
+    dataTransport: TransportType
     toggleFullscreenWithKeybind: boolean
 }
 
 export type StreamCodec = "h264" | "auto" | "h265" | "av1"
+export type TransportType = "auto" | "webrtc" | "websocket"
 
 export function defaultStreamSettings(): StreamSettings {
     return {
@@ -50,6 +52,7 @@ export function defaultStreamSettings(): StreamSettings {
             invertXY: false,
             sendIntervalOverride: null,
         },
+        dataTransport: "auto",
         toggleFullscreenWithKeybind: false
     }
 }
@@ -111,6 +114,7 @@ export class StreamSettingsComponent implements Component {
     private controllerSendIntervalOverride: InputComponent
 
     private otherHeader: HTMLHeadingElement = document.createElement("h2")
+    private dataTransport: SelectComponent
     private toggleFullscreenWithKeybind: InputComponent
 
     constructor(settings?: StreamSettings) {
@@ -317,6 +321,17 @@ export class StreamSettingsComponent implements Component {
         this.otherHeader.innerText = "Other"
         this.divElement.appendChild(this.otherHeader)
 
+        this.dataTransport = new SelectComponent("transport", [
+            { value: "auto", name: "Auto (Default)" },
+            { value: "webrtc", name: "WebRTC" },
+            { value: "websocket", name: "Web Socket" },
+        ], {
+            displayName: "Data Transport",
+            preSelectedOption: settings?.dataTransport ?? defaultSettings.dataTransport
+        })
+        this.dataTransport.addChangeListener(this.onSettingsChange.bind(this))
+        this.dataTransport.mount(this.divElement)
+
         this.toggleFullscreenWithKeybind = new InputComponent("toggleFullscreenWithKeybind", "checkbox", "Toggle Fullscreen and Mouse Lock with Ctrl + Shift + I", {
             checked: settings?.toggleFullscreenWithKeybind
         })
@@ -374,6 +389,8 @@ export class StreamSettingsComponent implements Component {
         } else {
             settings.controllerConfig.sendIntervalOverride = null
         }
+
+        settings.dataTransport = this.dataTransport.getValue() as any
 
         settings.toggleFullscreenWithKeybind = this.toggleFullscreenWithKeybind.isChecked()
 
