@@ -4,7 +4,7 @@ use std::{
 };
 
 use common::api_bindings::{StatsHostProcessingLatency, StreamerStatsUpdate};
-use log::warn;
+use log::{debug, warn};
 use moonlight_common::stream::{
     bindings::{
         Capabilities, DecodeResult, EstimatedRttInfo, SupportedVideoFormats, VideoDecodeUnit,
@@ -12,10 +12,7 @@ use moonlight_common::stream::{
     video::{VideoDecoder, VideoSetup},
 };
 
-use crate::{
-    StreamConnection,
-    transport::{OutboundPacket, TransportError},
-};
+use crate::{StreamConnection, transport::OutboundPacket};
 
 pub(crate) struct StreamVideoDecoder {
     pub(crate) stream: Weak<StreamConnection>,
@@ -37,9 +34,14 @@ impl VideoDecoder for StreamVideoDecoder {
 
         {
             stream.runtime.clone().block_on(async move {
-                let sender = stream.transport_sender.lock().await;
+                let mut sender = stream.transport_sender.lock().await;
 
-                sender.setup_video(setup).await
+                if let Some(sender) = sender.as_mut() {
+                    sender.setup_video(setup).await
+                } else {
+                    // TODO: what now?
+                    -1
+                }
             })
         }
     }
@@ -54,22 +56,27 @@ impl VideoDecoder for StreamVideoDecoder {
         };
 
         stream.runtime.clone().block_on(async {
-            let sender = stream.transport_sender.lock().await;
+            let mut sender = stream.transport_sender.lock().await;
 
-            let start = Instant::now();
-            let result = match sender.send_video_unit(&unit).await {
-                Err(err) => {
-                    warn!("Failed to send video decode unit: {err}");
-                    DecodeResult::Ok
-                }
-                Ok(value) => value,
-            };
-            drop(sender);
+            if let Some(sender) = sender.as_mut() {
+                let start = Instant::now();
+                let result = match sender.send_video_unit(&unit).await {
+                    Err(err) => {
+                        warn!("Failed to send video decode unit: {err}");
+                        DecodeResult::Ok
+                    }
+                    Ok(value) => value,
+                };
 
-            let frame_processing_time = Instant::now() - start;
-            self.stats.analyze(&stream, &unit, frame_processing_time);
+                let frame_processing_time = Instant::now() - start;
+                self.stats.analyze(&stream, &unit, frame_processing_time);
 
-            result
+                result
+            } else {
+                debug!("Dropping video packet because of missing transport");
+
+                DecodeResult::Ok
+            }
         })
     }
 
@@ -147,42 +154,36 @@ impl VideoStats {
 
             let stream = stream.clone();
             runtime.spawn(async move {
-                let transport = stream.transport_sender.lock().await;
-
-                // Send Video info
-                match transport
-                    .send(OutboundPacket::Stats(StreamerStatsUpdate::Video {
-                        host_processing_latency: has_host_processing_latency.then_some(
-                            StatsHostProcessingLatency {
-                                min_host_processing_latency_ms: min_host_processing_latency
-                                    .as_secs_f64()
-                                    * 1000.0,
-                                max_host_processing_latency_ms: max_host_processing_latency
-                                    .as_secs_f64()
-                                    * 1000.0,
-                                avg_host_processing_latency_ms: avg_host_processing_latency
-                                    .as_secs_f64()
-                                    * 1000.0,
-                            },
-                        ),
-                        min_streamer_processing_time_ms: min_streamer_processing_time.as_secs_f64()
-                            * 1000.0,
-                        max_streamer_processing_time_ms: max_streamer_processing_time.as_secs_f64()
-                            * 1000.0,
-                        avg_streamer_processing_time_ms: avg_streamer_processing_time.as_secs_f64()
-                            * 1000.0,
-                    }))
-                    .await
-                {
-                    Ok(_) => {}
-                    Err(TransportError::ChannelClosed) => {
-                        // ignore
-                    }
-                    Err(err) => {
-                        warn!("Failed to send stats: {err:?}");
-                    }
-                };
-                drop(transport);
+                stream
+                    .try_send_packet(
+                        OutboundPacket::Stats(StreamerStatsUpdate::Video {
+                            host_processing_latency: has_host_processing_latency.then_some(
+                                StatsHostProcessingLatency {
+                                    min_host_processing_latency_ms: min_host_processing_latency
+                                        .as_secs_f64()
+                                        * 1000.0,
+                                    max_host_processing_latency_ms: max_host_processing_latency
+                                        .as_secs_f64()
+                                        * 1000.0,
+                                    avg_host_processing_latency_ms: avg_host_processing_latency
+                                        .as_secs_f64()
+                                        * 1000.0,
+                                },
+                            ),
+                            min_streamer_processing_time_ms: min_streamer_processing_time
+                                .as_secs_f64()
+                                * 1000.0,
+                            max_streamer_processing_time_ms: max_streamer_processing_time
+                                .as_secs_f64()
+                                * 1000.0,
+                            avg_streamer_processing_time_ms: avg_streamer_processing_time
+                                .as_secs_f64()
+                                * 1000.0,
+                        }),
+                        "host / streamer processing latency",
+                        false,
+                    )
+                    .await;
 
                 // Send RTT info
                 let ml_stream_lock = stream.stream.read().await;
@@ -190,25 +191,18 @@ impl VideoStats {
                     let rtt = ml_stream.estimated_rtt_info();
                     drop(ml_stream_lock);
 
-                    let transport = stream.transport_sender.lock().await;
-
                     match rtt {
                         Ok(EstimatedRttInfo { rtt, rtt_variance }) => {
-                            match transport
-                                .send(OutboundPacket::Stats(StreamerStatsUpdate::Rtt {
-                                    rtt_ms: rtt.as_secs_f64() * 1000.0,
-                                    rtt_variance_ms: rtt_variance.as_secs_f64() * 1000.0,
-                                }))
-                                .await
-                            {
-                                Ok(_) => {}
-                                Err(TransportError::ChannelClosed) => {
-                                    // ignore
-                                }
-                                Err(err) => {
-                                    warn!("Failed to send stats: {err:?}");
-                                }
-                            };
+                            stream
+                                .try_send_packet(
+                                    OutboundPacket::Stats(StreamerStatsUpdate::Rtt {
+                                        rtt_ms: rtt.as_secs_f64() * 1000.0,
+                                        rtt_variance_ms: rtt_variance.as_secs_f64() * 1000.0,
+                                    }),
+                                    "estimated rtt info",
+                                    false,
+                                )
+                                .await;
                         }
                         Err(err) => {
                             warn!("failed to get estimated rtt info: {err:?}");

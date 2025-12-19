@@ -593,6 +593,7 @@ pub struct WebRTCTransportEvents {
     event_receiver: Receiver<TransportEvent>,
 }
 
+#[async_trait]
 impl TransportEvents for WebRTCTransportEvents {
     async fn poll_event(&mut self) -> Result<TransportEvent, TransportError> {
         self.event_receiver

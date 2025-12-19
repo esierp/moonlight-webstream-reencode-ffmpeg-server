@@ -22,6 +22,7 @@ use thiserror::Error;
 
 use crate::buffer::ByteBuffer;
 
+pub mod web_socket;
 pub mod webrtc;
 
 /// Look at TransportChannelId
@@ -473,6 +474,7 @@ pub enum TransportEvent {
     Closed,
 }
 
+#[async_trait]
 pub trait TransportEvents {
     async fn poll_event(&mut self) -> Result<TransportEvent, TransportError>;
 }

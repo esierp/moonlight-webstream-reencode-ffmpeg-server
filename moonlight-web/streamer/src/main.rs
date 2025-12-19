@@ -42,6 +42,7 @@ use tokio::{
     runtime::Handle,
     spawn,
     sync::{Mutex, Notify, RwLock},
+    task::spawn_blocking,
 };
 
 use common::api_bindings::{StreamCapabilities, StreamServerMessage};
@@ -221,7 +222,7 @@ struct StreamConnection {
     // Stream
     pub stream: RwLock<Option<MoonlightStream>>,
     pub active_gamepads: RwLock<ActiveGamepads>,
-    pub transport_sender: Mutex<Box<dyn TransportSender + Send + Sync>>,
+    pub transport_sender: Mutex<Option<Box<dyn TransportSender + Send + Sync + 'static>>>,
     pub terminate: Notify,
     is_terminating: AtomicBool,
 }
@@ -235,8 +236,6 @@ impl StreamConnection {
         mut ipc_receiver: IpcReceiver<ServerIpcMessage>,
         config: StreamerConfig,
     ) -> Result<Arc<Self>, anyhow::Error> {
-        let (sender, mut events) = webrtc::new(settings.clone(), &config.webrtc).await?;
-
         let this = Arc::new(Self {
             runtime: Handle::current(),
             moonlight,
@@ -246,10 +245,49 @@ impl StreamConnection {
             stream_info: Mutex::new(None),
             stream: RwLock::new(None),
             active_gamepads: RwLock::new(ActiveGamepads::empty()),
-            transport_sender: Mutex::new(Box::new(sender)),
+            transport_sender: Mutex::new(None),
             terminate: Notify::default(),
             is_terminating: AtomicBool::new(false),
         });
+
+        spawn({
+            let this = Arc::downgrade(&this);
+
+            async move {
+                while let Some(message) = ipc_receiver.recv().await {
+                    let Some(this) = this.upgrade() else {
+                        debug!("Received ipc message while the main type is already deallocated");
+                        return;
+                    };
+
+                    if let ServerIpcMessage::Stop = &message {
+                        this.on_ipc_message(ServerIpcMessage::Stop).await;
+                        return;
+                    }
+
+                    this.on_ipc_message(message).await;
+                }
+            }
+        });
+
+        // TODO: remove this and make this into a client request
+        let (sender, events) = webrtc::new(this.settings.clone(), &config.webrtc).await?;
+        this.set_transport(Box::new(sender), Box::new(events)).await;
+
+        Ok(this)
+    }
+
+    async fn set_transport(
+        self: &Arc<Self>,
+        new_sender: Box<dyn TransportSender + Send + Sync + 'static>,
+        mut events: Box<dyn TransportEvents + Send + Sync + 'static>,
+    ) {
+        let this = self.clone();
+
+        let old_transport = {
+            let mut sender = this.transport_sender.lock().await;
+            sender.replace(new_sender)
+        };
 
         spawn({
             let mut ipc_sender = this.ipc_sender.clone();
@@ -262,7 +300,7 @@ impl StreamConnection {
                             ipc_sender.send(message).await;
                         }
                         Ok(TransportEvent::StartStream { settings }) => {
-                            // TODO: set settings
+                            // TODO: set settings using the event
                             let Some(this) = this.upgrade() else {
                                 warn!(
                                     "Failed to get stream connection, stopping listening to events"
@@ -319,27 +357,28 @@ impl StreamConnection {
             }
         });
 
-        spawn({
-            let this = Arc::downgrade(&this);
+        if let Some(old_transport) = old_transport {
+            spawn(async move {
+                if let Err(err) = old_transport.close().await {
+                    warn!("Failed to close old transport: {err:?}");
+                }
+            });
+        }
+    }
+    async fn try_send_packet(&self, packet: OutboundPacket, packet_ty: &str, should_warn: bool) {
+        let mut sender = self.transport_sender.lock().await;
 
-            async move {
-                while let Some(message) = ipc_receiver.recv().await {
-                    let Some(this) = this.upgrade() else {
-                        debug!("Received ipc message while the main type is already deallocated");
-                        return;
-                    };
-
-                    if let ServerIpcMessage::Stop = &message {
-                        this.on_ipc_message(ServerIpcMessage::Stop).await;
-                        return;
-                    }
-
-                    this.on_ipc_message(message).await;
+        if let Some(sender) = sender.as_mut() {
+            if let Err(err) = sender.send(packet).await {
+                if should_warn {
+                    warn!("Failed to send outbound packet: {packet_ty}, {err:?}");
+                } else {
+                    debug!("Failed to send outbound packet: {packet_ty}, {err:?}");
                 }
             }
-        });
-
-        Ok(this)
+        } else {
+            debug!("Dropping packet {packet:?} because no transport is selected!");
+        }
     }
 
     async fn on_packet(&self, packet: InboundPacket) {
@@ -511,18 +550,30 @@ impl StreamConnection {
         }
     }
 
-    async fn on_ipc_message(self: &Arc<Self>, message: ServerIpcMessage) {
-        let this = self.clone();
+    async fn on_ipc_message(&self, message: ServerIpcMessage) {
+        let mut sender = self.transport_sender.lock().await;
 
-        let sender = this.transport_sender.lock().await;
-
-        if let Err(err) = sender.on_ipc_message(message).await {
-            warn!("Failed to send ipc message: {err:?}");
+        if let Some(sender) = sender.as_mut() {
+            if let Err(err) = sender.on_ipc_message(message).await {
+                warn!("Failed to send ipc message: {err:?}");
+            }
+        } else {
+            // TODO
         }
     }
 
     // Start Moonlight Stream
     async fn start_stream(self: &Arc<Self>) -> Result<(), anyhow::Error> {
+        // We might already be streaming -> remove and wait for connection close firstly
+        {
+            let mut stream = self.stream.write().await;
+            if let Some(stream) = stream.take() {
+                spawn_blocking(move || {
+                    stream.stop();
+                });
+            }
+        }
+
         // Send stage
         let mut ipc_sender = self.ipc_sender.clone();
         ipc_sender
@@ -651,15 +702,18 @@ impl StreamConnection {
         };
         drop(stream);
 
-        let transport = self.transport_sender.lock().await;
-        if let Err(err) = transport.close().await {
-            warn!("Error whilst closing transport: {err}");
+        let mut transport = self.transport_sender.lock().await;
+        if let Some(transport) = transport.take() {
+            if let Err(err) = transport.close().await {
+                warn!("Error whilst closing transport: {err}");
+            }
+            drop(transport);
         }
-        drop(transport);
 
         let mut ipc_sender = self.ipc_sender.clone();
         ipc_sender.send(StreamerIpcMessage::Stop).await;
 
+        // TODO: should we terminate or wait for a new retry?
         info!("Terminating Self");
         self.terminate.notify_waiters();
     }
@@ -747,17 +801,17 @@ impl ConnectionListener for StreamConnectionListener {
         };
 
         stream.clone().runtime.block_on(async move {
-            let sender = stream.transport_sender.lock().await;
-            if let Err(err) = sender
-                .send(OutboundPacket::General {
-                    message: GeneralServerMessage::ConnectionStatusUpdate {
-                        status: status.into(),
+            stream
+                .try_send_packet(
+                    OutboundPacket::General {
+                        message: GeneralServerMessage::ConnectionStatusUpdate {
+                            status: status.into(),
+                        },
                     },
-                })
+                    "connection status update",
+                    true,
+                )
                 .await
-            {
-                warn!("Failed to send connection status update: {err:?}");
-            }
         })
     }
 
@@ -775,17 +829,17 @@ impl ConnectionListener for StreamConnectionListener {
         };
 
         stream.runtime.clone().block_on(async move {
-            let sender = stream.transport_sender.lock().await;
-            if let Err(err) = sender
-                .send(OutboundPacket::ControllerRumble {
-                    controller_number: controller_number as u8,
-                    low_frequency_motor,
-                    high_frequency_motor,
-                })
-                .await
-            {
-                warn!("Failed to send controller rumble: {err:?}");
-            }
+            stream
+                .try_send_packet(
+                    OutboundPacket::ControllerRumble {
+                        controller_number: controller_number as u8,
+                        low_frequency_motor,
+                        high_frequency_motor,
+                    },
+                    "controller rumble",
+                    true,
+                )
+                .await;
         });
     }
 
@@ -801,18 +855,17 @@ impl ConnectionListener for StreamConnectionListener {
         };
 
         stream.runtime.clone().block_on(async move {
-            let sender = stream.transport_sender.blocking_lock();
-
-            if let Err(err) = sender
-                .send(OutboundPacket::ControllerTriggerRumble {
-                    controller_number: controller_number as u8,
-                    left_trigger_motor,
-                    right_trigger_motor,
-                })
-                .await
-            {
-                warn!("Failed to send controller trigger rumble: {err:?}");
-            }
+            stream
+                .try_send_packet(
+                    OutboundPacket::ControllerTriggerRumble {
+                        controller_number: controller_number as u8,
+                        left_trigger_motor,
+                        right_trigger_motor,
+                    },
+                    "controller rumble triggers",
+                    true,
+                )
+                .await;
         });
     }
 
@@ -842,6 +895,7 @@ impl ConnectionListener for StreamConnectionListener {
     }
 }
 
+// TODO: move this into it's own module
 struct StreamAudioDecoder {
     stream: Weak<StreamConnection>,
 }
@@ -859,9 +913,13 @@ impl AudioDecoder for StreamAudioDecoder {
         };
 
         stream.runtime.clone().block_on(async move {
-            let sender = stream.transport_sender.lock().await;
-
-            sender.setup_audio(audio_config, stream_config).await
+            let mut sender = stream.transport_sender.lock().await;
+            if let Some(sender) = sender.as_mut() {
+                sender.setup_audio(audio_config, stream_config).await
+            } else {
+                // TODO: what now?
+                -1
+            }
         })
     }
 
@@ -875,9 +933,14 @@ impl AudioDecoder for StreamAudioDecoder {
         };
 
         stream.runtime.clone().block_on(async move {
-            let stream = stream.transport_sender.lock().await;
-            if let Err(err) = stream.send_audio_sample(data).await {
-                warn!("Failed to send audio sample: {err}");
+            let mut stream = stream.transport_sender.lock().await;
+
+            if let Some(stream) = stream.as_mut() {
+                if let Err(err) = stream.send_audio_sample(data).await {
+                    warn!("Failed to send audio sample: {err}");
+                }
+            } else {
+                debug!("Dropping audio packet because of missing transport");
             }
         });
     }
