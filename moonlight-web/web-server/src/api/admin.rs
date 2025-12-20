@@ -121,7 +121,7 @@ pub async fn list_users(app: Data<App>, admin: Admin) -> Result<Json<GetUsersRes
                 out_users.push(user);
             }
             Err(err) => {
-                warn!("Failed to query detailed user of {user:?}: {err:?}");
+                warn!("Failed to query detailed user of {user:?}: {err}");
             }
         }
     }

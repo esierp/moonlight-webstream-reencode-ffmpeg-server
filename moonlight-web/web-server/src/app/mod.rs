@@ -213,7 +213,7 @@ impl App {
                 {
                     Ok(_) => {}
                     Err(err) => {
-                        warn!("failed to move global host to new user {user_id:?}: {err:?}");
+                        warn!("failed to move global host to new user {user_id:?}: {err}");
                     }
                 }
             }

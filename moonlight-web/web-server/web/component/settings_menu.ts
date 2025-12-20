@@ -217,7 +217,7 @@ export class StreamSettingsComponent implements Component {
 
         // Codec
         this.videoCodec = new SelectComponent("videoCodec", [
-            { value: "h264", name: "H264 (Default)" },
+            { value: "h264", name: "H264" },
             { value: "auto", name: "Auto (Experimental)" },
             { value: "h265", name: "H265" },
             { value: "av1", name: "AV1 (Experimental)" },
@@ -322,9 +322,9 @@ export class StreamSettingsComponent implements Component {
         this.divElement.appendChild(this.otherHeader)
 
         this.dataTransport = new SelectComponent("transport", [
-            { value: "auto", name: "Auto (Default)" },
+            { value: "auto", name: "Auto" },
             { value: "webrtc", name: "WebRTC" },
-            { value: "websocket", name: "Web Socket" },
+            { value: "websocket", name: "Web Socket (Experimental)" },
         ], {
             displayName: "Data Transport",
             preSelectedOption: settings?.dataTransport ?? defaultSettings.dataTransport

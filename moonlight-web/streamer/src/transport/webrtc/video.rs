@@ -350,7 +350,7 @@ async fn send_single_frame(
         ) {
             Ok(value) => value,
             Err(err) => {
-                warn!("failed to packetize packet: {err:?}");
+                warn!("failed to packetize packet: {err}");
                 continue;
             }
         };

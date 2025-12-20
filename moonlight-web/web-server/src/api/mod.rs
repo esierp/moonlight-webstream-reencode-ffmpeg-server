@@ -94,14 +94,14 @@ async fn list_hosts(
                 let undetailed = match host.undetailed_host(&mut user).await {
                     Ok(value) => value,
                     Err(err) => {
-                        warn!("Failed to get undetailed host of {host:?}: {err:?}");
+                        warn!("Failed to get undetailed host of {host:?}: {err}");
                         return;
                     }
                 };
 
                 if let Err(err) = stream_sender.send(undetailed).await {
                     warn!(
-                        "Failed to send back undetailed host data using response streaming: {err:?}"
+                        "Failed to send back undetailed host data using response streaming: {err}"
                     );
                 }
             });
@@ -220,13 +220,13 @@ async fn pair_host(
                     .send(PostPairResponse2::Paired(detailed_host))
                     .await
                 {
-                    warn!("Failed to send pair success: {err:?}");
+                    warn!("Failed to send pair success: {err}");
                 }
             }
             Err(err) => {
                 warn!("Failed to pair host: {err}");
                 if let Err(err) = stream_sender.send(PostPairResponse2::PairError).await {
-                    warn!("Failed to send pair failure: {err:?}");
+                    warn!("Failed to send pair failure: {err}");
                 }
             }
         }

@@ -23,9 +23,9 @@ pub enum ApiError<RequestError> {
     InvalidXmlStatusCode { message: Option<String> },
     #[error("the returned xml doc doesn't have the root node")]
     XmlRootNotFound,
-    #[error("the text contents of an xml node aren't present")]
+    #[error("the text contents of an xml node aren't present: {0}")]
     XmlTextNotFound(&'static str),
-    #[error("detail was not found")]
+    #[error("detail was not found: {0}")]
     DetailNotFound(&'static str),
     #[error("{0}")]
     ParseServerStateError(#[from] ParseServerStateError),
