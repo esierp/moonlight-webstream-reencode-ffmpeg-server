@@ -1,4 +1,5 @@
 import "./polyfill/index.js"
+import "./styles/index.js"
 import { Api, apiGetUser, apiLogout, apiPostUser, FetchError, getApi } from "./api.js";
 import { Component, ComponentEvent } from "./component/index.js";
 import { showErrorPopup } from "./component/error.js";
