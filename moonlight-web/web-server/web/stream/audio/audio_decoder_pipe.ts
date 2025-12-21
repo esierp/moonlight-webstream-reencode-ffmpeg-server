@@ -1,18 +1,22 @@
+import { Logger } from "../log.js";
 import { AudioDecodeUnit, AudioPlayerSetup, DataAudioPlayer, SampleAudioPlayer } from "./index.js";
 
 export class AudioDecoderPipe<T extends SampleAudioPlayer> extends DataAudioPlayer {
 
     static isBrowserSupported(): boolean {
-        // TODO: allow streaming without audio
         return "AudioDecoder" in window
     }
 
+    private logger: Logger | null = null
+
     private base: T
 
+    private errored = false
     private decoder: AudioDecoder
 
-    constructor(base: T) {
+    constructor(base: T, logger?: Logger) {
         super(`audio_decoder -> ${base.implementationName}`)
+        this.logger = logger ?? null
 
         this.base = base
 
@@ -23,14 +27,15 @@ export class AudioDecoderPipe<T extends SampleAudioPlayer> extends DataAudioPlay
     }
 
     private onError(error: any) {
-        // TODO: use logger
+        this.errored = true
+
+        this.logger?.debug(`AudioDecoder has an error ${"toString" in error ? error.toString() : `${error}`}`, { type: "fatal" })
         console.error(error)
     }
 
     private onOutput(sample: AudioData) {
         this.base.submitSample(sample)
     }
-
 
     setup(setup: AudioPlayerSetup): void {
         this.base.setup(setup)
@@ -42,15 +47,23 @@ export class AudioDecoderPipe<T extends SampleAudioPlayer> extends DataAudioPlay
         })
     }
 
+    private isFirstPacket = true
+
     decodeAndPlay(unit: AudioDecodeUnit): void {
+        if (this.errored) {
+            console.debug("Cannot submit audio decode unit because the stream errored")
+            return
+        }
+
         const chunk = new EncodedAudioChunk({
-            type: "key", // TODO: there are audio key and delta frame
+            type: this.isFirstPacket ? "key" : "delta",
             data: unit.data,
             timestamp: unit.timestampMicroseconds,
             duration: unit.durationMicroseconds,
             // We should be allowed to transfer because this data won't be used in the future
             transfer: [unit.data]
         })
+        this.isFirstPacket = false
 
         this.decoder.decode(chunk)
     }

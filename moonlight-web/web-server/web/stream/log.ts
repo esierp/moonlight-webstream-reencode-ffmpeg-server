@@ -1,4 +1,5 @@
 
+// TODO: add explanation for a big text which will be the main focus to explain why the connection / decoder might not be found and what can be done about it
 export type LogMessageType = "fatal" | "recover"
 export type LogMessageInfo = {
     type?: LogMessageType

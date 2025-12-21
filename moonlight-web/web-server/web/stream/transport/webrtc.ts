@@ -1,6 +1,6 @@
 import { StreamSignalingMessage, TransportChannelId } from "../../api_bindings.js";
 import { Logger } from "../log.js";
-import { DataTransportChannel, Transport, TRANSPORT_CHANNEL_OPTIONS, TransportAudioSetup, TransportChannel, TransportChannelIdKey, TransportChannelIdValue, TransportVideoSetup, AudioTrackTransportChannel, VideoTrackTransportChannel, TrackTransportChannel } from "./index.js";
+import { DataTransportChannel, Transport, TRANSPORT_CHANNEL_OPTIONS, TransportAudioSetup, TransportChannel, TransportChannelIdKey, TransportChannelIdValue, TransportVideoSetup, AudioTrackTransportChannel, VideoTrackTransportChannel, TrackTransportChannel, TransportShutdown } from "./index.js";
 
 export class WebRTCTransport implements Transport {
     implementationName: string = "webrtc"
@@ -320,7 +320,8 @@ export class WebRTCTransport implements Transport {
         return channel
     }
 
-    onclose: (() => void) | null = null
+    // TODO: implement this
+    onclose: ((shutdown: TransportShutdown) => void) | null = null
     async close(): Promise<void> {
         this.peer?.close()
     }

@@ -5,7 +5,7 @@ use common::{
     api_bindings::TransportChannelId,
     ipc::{ServerIpcMessage, StreamerIpcMessage},
 };
-use log::{debug, trace, warn};
+use log::{trace, warn};
 use moonlight_common::stream::{
     bindings::{AudioConfig, DecodeResult, FrameType, OpusMultistreamConfig, VideoDecodeUnit},
     video::VideoSetup,
@@ -93,8 +93,8 @@ impl TransportSender for WebSocketTransportSender {
 
     async fn setup_audio(
         &self,
-        audio_config: AudioConfig,
-        stream_config: OpusMultistreamConfig,
+        _audio_config: AudioConfig,
+        _stream_config: OpusMultistreamConfig,
     ) -> i32 {
         // empty
         0

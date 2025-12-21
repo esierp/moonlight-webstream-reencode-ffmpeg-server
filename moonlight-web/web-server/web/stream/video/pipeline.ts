@@ -3,12 +3,13 @@ import { VideoElementRenderer } from "./video_element.js"
 import { VideoMediaStreamTrackProcessorPipe } from "./media_stream_track_processor_pipe.js"
 import { DataVideoRenderer, PacketVideoRenderer, TrackVideoRenderer, VideoRenderer } from "./index.js"
 import { VideoDecoderPipe } from "./video_decoder_pipe.js"
-import { DepacketizerVideoPipe } from "./depackitize_video_pipe.js"
+import { DepacketizeVideoPipe } from "./depackitize_video_pipe.js"
+import { Logger } from "../log.js"
 
-type PipelineResult<T> = { videoRenderer: T, log: string, error: null } | { videoRenderer: null, log: string, error: string }
+type PipelineResult<T> = { videoRenderer: T, error: false } | { videoRenderer: null, error: true }
 
 interface FinalVideoRenderer {
-    new(): VideoRenderer
+    new(logger?: Logger): VideoRenderer
 
     readonly type: string
     isBrowserSupported(): boolean
@@ -19,7 +20,7 @@ const FINAL_VIDEO_RENDERER: Array<FinalVideoRenderer> = [
 ]
 
 interface VideoPipe {
-    new(base: any): VideoRenderer
+    new(base: any, logger?: Logger): VideoRenderer
 
     readonly type: string
     isBrowserSupported(): boolean
@@ -33,28 +34,31 @@ export type VideoPipelineOptions = {
     canvasRenderer: boolean
 }
 
-export function buildVideoPipeline(type: "videotrack", settings: VideoPipelineOptions): PipelineResult<TrackVideoRenderer>
-export function buildVideoPipeline(type: "data", settings: VideoPipelineOptions): PipelineResult<PacketVideoRenderer>
+export function buildVideoPipeline(type: "videotrack", settings: VideoPipelineOptions, logger?: Logger): PipelineResult<TrackVideoRenderer>
+export function buildVideoPipeline(type: "data", settings: VideoPipelineOptions, logger?: Logger): PipelineResult<PacketVideoRenderer>
 
-export function buildVideoPipeline(type: string, settings: VideoPipelineOptions): PipelineResult<VideoRenderer> {
-    let log = `Building video pipeline with output "${type}"`
+export function buildVideoPipeline(type: string, settings: VideoPipelineOptions, logger?: Logger): PipelineResult<VideoRenderer> {
+    logger?.debug(`Building video pipeline with output "${type}"`)
 
     // Forced renderer
     if (settings.canvasRenderer) {
+        logger?.debug("Forcing canvas renderer")
+
         if (type == "videotrack" && VideoMediaStreamTrackProcessorPipe.isBrowserSupported() && CanvasVideoRenderer.isBrowserSupported()) {
             const videoRenderer = new VideoMediaStreamTrackProcessorPipe(new CanvasVideoRenderer())
 
-            return { videoRenderer, log, error: null }
+            return { videoRenderer, error: false }
         } else {
-            throw "Failed to create video canvas renderer because it is not supported this this browser"
+            logger?.debug("Failed to create video canvas renderer because it is not supported this this browser", { type: "fatal" })
+            return { videoRenderer: null, error: true }
         }
     }
 
     if (type == "data") {
         if (VideoDecoderPipe.isBrowserSupported() && CanvasVideoRenderer.isBrowserSupported()) {
-            const videoRenderer = new DepacketizerVideoPipe(new VideoDecoderPipe(new CanvasVideoRenderer()))
+            const videoRenderer = new DepacketizeVideoPipe(new VideoDecoderPipe(new CanvasVideoRenderer()))
 
-            return { videoRenderer, log, error: null }
+            return { videoRenderer, error: false }
         }
     }
 
@@ -62,9 +66,10 @@ export function buildVideoPipeline(type: string, settings: VideoPipelineOptions)
 
     const directVideoRenderers = FINAL_VIDEO_RENDERER.filter(entry => entry.type == type && entry.isBrowserSupported())
     if (directVideoRenderers.length >= 1) {
-        const videoRenderer = new directVideoRenderers[0]
-        return { videoRenderer, log, error: null }
+        const videoRenderer = new directVideoRenderers[0](logger)
+        return { videoRenderer, error: false }
     }
 
-    return { videoRenderer: null, log, error: "No supported video renderer found!" }
+    logger?.debug("No supported video renderer found!", { type: "fatal" })
+    return { videoRenderer: null, error: true }
 }

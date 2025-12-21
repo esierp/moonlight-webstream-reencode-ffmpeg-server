@@ -19,7 +19,7 @@ export class AudioMediaStreamTrackGeneratorPipe<T extends TrackAudioPlayer> exte
         this.writer = this.trackGenerator.writable.getWriter()
     }
 
-    private isFirstSample = false
+    private isFirstSample = true
     submitSample(sample: AudioData): void {
         if (this.isFirstSample) {
             this.isFirstSample = false
