@@ -618,7 +618,7 @@ impl StreamConnection {
 
         let video_decoder = StreamVideoDecoder {
             stream: Arc::downgrade(self),
-            supported_formats: SupportedVideoFormats::empty(),
+            supported_formats: self.settings.video_supported_formats,
             stats: Default::default(),
         };
 

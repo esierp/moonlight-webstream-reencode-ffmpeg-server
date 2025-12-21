@@ -22,11 +22,7 @@ use webrtc::{
         receiver_estimated_maximum_bitrate::ReceiverEstimatedMaximumBitrate,
     },
     rtp::{
-        codecs::{
-            av1::Av1Payloader,
-            h264::H264Payloader,
-            h265::{HevcPayloader, RTP_OUTBOUND_MTU},
-        },
+        codecs::{av1::Av1Payloader, h265::RTP_OUTBOUND_MTU},
         header::Header,
         packet::Packet,
         packetizer::Payloader,
@@ -41,7 +37,11 @@ use webrtc::{
 use crate::transport::webrtc::{
     WebRtcInner,
     sender::{SequencedTrackLocalStaticRTP, TrackLocalSender},
-    video::{annexb::AnnexBSplitter, h264::reader::H264Reader, h265::reader::H265Reader},
+    video::{
+        annexb::AnnexBSplitter,
+        h264::{payloader::H264Payloader, reader::H264Reader},
+        h265::{payloader::H265Payloader, reader::H265Reader},
+    },
 };
 
 mod annexb;
@@ -55,7 +55,7 @@ enum VideoCodec {
     },
     H265 {
         nal_reader: H265Reader<Cursor<Vec<u8>>>,
-        payloader: HevcPayloader,
+        payloader: H265Payloader,
     },
     Av1 {
         annex_b: AnnexBSplitter<Cursor<Vec<u8>>>,

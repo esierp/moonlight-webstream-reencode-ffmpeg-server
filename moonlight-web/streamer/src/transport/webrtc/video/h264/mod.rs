@@ -9,8 +9,6 @@ use num_derive::FromPrimitive;
 
 use crate::transport::webrtc::video::annexb::AnnexBStartCode;
 
-// Don't use the custom impl
-#[allow(unused)]
 pub mod payloader;
 
 pub mod reader;
