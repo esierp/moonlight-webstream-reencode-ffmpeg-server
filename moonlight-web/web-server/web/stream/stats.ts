@@ -1,5 +1,5 @@
 import { StreamerStatsUpdate, TransportChannelId } from "../api_bindings.js"
-import { ByteBuffer } from "./buffer.js"
+import { BIG_BUFFER, ByteBuffer } from "./buffer.js"
 import { Logger } from "./log.js"
 import { DataTransportChannel, Transport } from "./transport/index.js"
 
@@ -125,7 +125,7 @@ export class StreamStats {
         this.setEnabled(!this.isEnabled())
     }
 
-    private buffer: ByteBuffer = new ByteBuffer(10000)
+    private buffer: ByteBuffer = BIG_BUFFER
     private onRawData(data: ArrayBuffer) {
         this.buffer.reset()
         this.buffer.putU8Array(new Uint8Array(data))

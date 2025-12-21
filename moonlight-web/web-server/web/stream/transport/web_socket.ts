@@ -50,11 +50,13 @@ export class WebSocketTransport implements Transport {
 
     onclose: ((shutdown: TransportShutdown) => void) | null = null
 
-    close(): Promise<void> {
-        throw new Error("Method not implemented.");
+    async close(): Promise<void> {
+        // do nothing, we don't own this ws, the stream owns the ws
+        // -> maybe we changed protocol
     }
-    getStats(): Promise<Record<string, string>> {
-        throw new Error("Method not implemented.");
+    async getStats(): Promise<Record<string, string>> {
+        // TODO: maybe a ping (from browser ws to streamer) to get rtt
+        return {}
     }
 
 }

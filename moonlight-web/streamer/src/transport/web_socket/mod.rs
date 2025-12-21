@@ -120,12 +120,14 @@ impl TransportSender for WebSocketTransportSender {
     async fn send(&self, packet: OutboundPacket) -> Result<(), TransportError> {
         let mut new_buffer = Vec::new();
 
-        let (id, range) = packet.serialize(&mut new_buffer).unwrap();
+        let (id, mut range) = packet.serialize(&mut new_buffer).unwrap();
 
-        new_buffer.drain(..range.start + 1);
-        new_buffer.resize(range.end - range.start + 1, 0);
-
-        new_buffer[0] = id.0;
+        if range.start == 0 {
+            new_buffer.resize(range.end - range.start + 1, 0);
+            new_buffer.copy_within(range.clone(), range.start + 1);
+            range.start += 1;
+        }
+        new_buffer[range.start - 1] = id.0;
 
         self.event_sender
             .send(TransportEvent::SendIpc(

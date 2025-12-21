@@ -136,3 +136,5 @@ export class ByteBuffer {
         return this.buffer.slice(this.position, this.limit)
     }
 }
+
+export const BIG_BUFFER = new ByteBuffer(1000000)

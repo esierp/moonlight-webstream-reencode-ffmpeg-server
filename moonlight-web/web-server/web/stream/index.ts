@@ -2,10 +2,9 @@ import { Api } from "../api.js"
 import { App, ConnectionStatus, StreamCapabilities, StreamClientMessage, StreamServerMessage, TransportChannelId } from "../api_bindings.js"
 import { Component } from "../component/index.js"
 import { StreamSettings } from "../component/settings_menu.js"
-import { AudioElementPlayer } from "./audio/audio_element.js"
 import { AudioPlayer, AudioPlayerSetup } from "./audio/index.js"
 import { buildAudioPipeline } from "./audio/pipeline.js"
-import { ByteBuffer } from "./buffer.js"
+import { BIG_BUFFER } from "./buffer.js"
 import { defaultStreamInputConfig, StreamInput } from "./input.js"
 import { Logger } from "./log.js"
 import { StreamStats } from "./stats.js"
@@ -330,7 +329,7 @@ export class Stream implements Component {
             SetTransport: "WebSocket"
         })
 
-        const transport = new WebSocketTransport(this.ws, new ByteBuffer(100000), this.logger)
+        const transport = new WebSocketTransport(this.ws, BIG_BUFFER, this.logger)
 
         this.setTransport(transport)
     }
