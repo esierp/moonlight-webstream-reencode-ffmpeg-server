@@ -454,6 +454,7 @@ Other changes:
 
 ## Contributors
 - Thanks to [@Argon2000](https://github.com/Argon2000) for implementing a canvas renderer, which makes this run in the Tesla browser.
+- Thanks to [@Maneetbal](https://github.com/Maneetbal) for creating a new beautiful GUI.
 
 ## Building
 Make sure you've cloned this repo with all it's submodules
