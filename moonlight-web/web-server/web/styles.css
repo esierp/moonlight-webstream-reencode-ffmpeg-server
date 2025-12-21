@@ -50,7 +50,7 @@ body {
     font-size: 1.2rem;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: background-color var(--dur-med) ease, color var(--dur-med) ease;
-    color: var(--text-1);
+    color: #ffffff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
 
@@ -1047,19 +1047,33 @@ input[type=number] {
 }
 
 .host-loading-cancel {
-    padding: var(--space-xs) var(--space-md);
-    background: rgba(255, 140, 66, 0.2);
-    border: 1px solid var(--error);
-    border-radius: var(--radius-sm);
-    color: var(--error);
-    font-size: 0.8rem;
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(180deg, rgba(255,140,66,0.18), rgba(255,120,40,0.06));
+    border: 1px solid rgba(255,140,66,0.95);
+    border-radius: var(--radius-md);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all var(--dur-fast) ease;
+    transition: transform var(--dur-fast) ease, box-shadow var(--dur-fast) ease, background var(--dur-fast) ease;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.6);
 }
 
 .host-loading-cancel:hover {
-    background: rgba(255, 140, 66, 0.4);
-    box-shadow: 0 0 12px rgba(255, 140, 66, 0.4);
+    transform: translateY(-3px);
+    background: linear-gradient(180deg, rgba(255,140,66,0.28), rgba(255,120,40,0.08));
+    box-shadow: 0 14px 30px rgba(0,0,0,0.65), 0 2px 8px rgba(255,140,66,0.06) inset;
+}
+
+.host-loading-cancel:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.55) inset;
+}
+
+.host-loading-cancel:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(255,140,66,0.12), 0 8px 20px rgba(0,0,0,0.55);
 }
 
 /** Stream */
