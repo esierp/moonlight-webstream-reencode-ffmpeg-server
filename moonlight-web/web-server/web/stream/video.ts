@@ -70,6 +70,7 @@ export function hasAnyCodec(codecs: VideoCodecSupport): boolean {
 
 export async function getSupportedVideoFormats(): Promise<VideoCodecSupport> {
     // TODO: this function is kinda misleading for the server, there are multiple transports which support different codecs -> seperate the codecs into the supported codecs per transport
+    // TODO: maybe use the pipes / renderers to get the video codecs and only send the pipes + video codec combo's that we can play to the server
 
     let support: VideoCodecSupport = emptyVideoFormats()
 

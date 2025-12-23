@@ -99,10 +99,10 @@ export async function buildVideoPipeline(type: string, settings: VideoPipelineOp
 
                 return { videoRenderer, error: false }
             }
-        } else {
-            return { videoRenderer: null, error: true }
         }
+        return { videoRenderer: null, error: true }
     }
+    logger?.debug("Selecting pipeline automatically")
 
     // TODO more dynamically create pipelines based on browser support
 
@@ -111,6 +111,15 @@ export async function buildVideoPipeline(type: string, settings: VideoPipelineOp
             videoInfo.get(DepacketizeVideoPipe)?.executionEnvironment.main
             && videoInfo.get(VideoDecoderPipe)?.executionEnvironment.main
             && videoInfo.get(VideoMediaStreamTrackGeneratorPipe)?.executionEnvironment.main
+            && videoInfo.get(VideoElementRenderer)?.executionEnvironment.main
+        ) {
+            const videoRenderer = new DepacketizeVideoPipe(new VideoDecoderPipe(new VideoMediaStreamTrackGeneratorPipe(new VideoElementRenderer()), logger))
+
+            return { videoRenderer, error: false }
+        } else if (
+            videoInfo.get(DepacketizeVideoPipe)?.executionEnvironment.main
+            && videoInfo.get(VideoDecoderPipe)?.executionEnvironment.main
+            && videoInfo.get(VideoTrackGeneratorPipe)?.executionEnvironment.main
             && videoInfo.get(VideoElementRenderer)?.executionEnvironment.main
         ) {
             const videoRenderer = new DepacketizeVideoPipe(new VideoDecoderPipe(new VideoMediaStreamTrackGeneratorPipe(new VideoElementRenderer()), logger))

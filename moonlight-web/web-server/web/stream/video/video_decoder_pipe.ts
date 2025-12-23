@@ -48,6 +48,7 @@ export class VideoDecoderPipe<T extends FrameVideoRenderer> extends DataVideoRen
         this.errored = true
 
         this.logger?.debug(`VideoDecoder has an error ${"toString" in error ? error.toString() : `${error}`}`, { type: "fatal" })
+        this.logger?.debug(`VideoDecoder config: ${JSON.stringify(this.translator?.getCurrentConfig())}`)
         console.error(error)
     }
 
@@ -161,6 +162,9 @@ abstract class CodecStreamTranslator {
 
     setBaseConfig(decoderConfig: VideoDecoderConfig) {
         this.decoderConfig = decoderConfig
+    }
+    getCurrentConfig(): VideoDecoderConfig | null {
+        return this.decoderConfig
     }
 
     protected currentFrame = new Uint8Array(1000)
