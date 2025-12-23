@@ -4,7 +4,7 @@ use std::{
 };
 
 use common::api_bindings::{StatsHostProcessingLatency, StreamerStatsUpdate};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use moonlight_common::stream::{
     bindings::{
         Capabilities, DecodeResult, EstimatedRttInfo, SupportedVideoFormats, VideoDecodeUnit,
@@ -39,7 +39,7 @@ impl VideoDecoder for StreamVideoDecoder {
                 if let Some(sender) = sender.as_mut() {
                     sender.setup_video(setup).await
                 } else {
-                    // TODO: what now?
+                    error!("Failed to setup video because of missing transport!");
                     -1
                 }
             })

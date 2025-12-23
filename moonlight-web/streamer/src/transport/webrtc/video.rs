@@ -441,15 +441,12 @@ fn video_format_to_codec(format: VideoFormat) -> Option<RTCRtpCodecParameters> {
             ..Default::default()
         }),
 
-        // TODO: h265 requires resolution in the level-id field, set it based on resolution and fps
         // -- H265 Main Profile
         VideoFormat::H265 => Some(RTCRtpCodecParameters {
             capability: RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_HEVC.to_owned(),
                 clock_rate: 90000,
                 channels: 0,
-                // They're the same
-                // sdp_fmtp_line: "profile-id=1;level-id=93;tier-flag=0;tx-mode=1".to_owned(),
                 sdp_fmtp_line: "".to_owned(),
                 rtcp_feedback: rtcp_feedback.clone(),
             },

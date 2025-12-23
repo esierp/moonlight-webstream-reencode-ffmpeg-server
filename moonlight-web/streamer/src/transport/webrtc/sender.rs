@@ -99,7 +99,6 @@ where
         }
     }
 
-    // TODO: make the blocking calls use runtime.block_on
     pub async fn create_track(
         &mut self,
         track: Track,
@@ -284,7 +283,7 @@ impl TrackLike for SequencedTrackLocalStaticRTP {
             return Ok(());
         }
         if any_paused {
-            // TODO: maybe warn?
+            warn!("WebRTC: not all paused but any paused");
         }
 
         let mut sequence_number = self.sequence_number.lock().await;

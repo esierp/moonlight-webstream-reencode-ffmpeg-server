@@ -77,7 +77,6 @@ struct WebRtcInner {
     event_sender: Sender<TransportEvent>,
     general_channel: Arc<RTCDataChannel>,
     stats_channel: Mutex<Option<Arc<RTCDataChannel>>>,
-    // TODO: use negotiated channels -> no rwlock required
     video: Mutex<WebRtcVideo>,
     audio: Mutex<WebRtcAudio>,
     // Timeout / Terminate

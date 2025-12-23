@@ -561,7 +561,6 @@ pub enum TransportEvent {
     StartStream { settings: StreamSettings },
     RecvPacket(InboundPacket),
     SendIpc(StreamerIpcMessage),
-    // TODO: use the error and not this event here
     Closed,
 }
 
