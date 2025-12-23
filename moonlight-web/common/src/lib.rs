@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use log::warn;
 use moonlight_common::stream::bindings::{Colorspace, SupportedVideoFormats};
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,16 @@ pub struct StreamSettings {
     pub video_supported_formats: SupportedVideoFormats,
     pub video_colorspace: Colorspace,
     pub video_color_range_full: bool,
+}
+
+impl Display for StreamSettings {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} with {}x{}x{}",
+            self.video_supported_formats, self.width, self.height, self.fps
+        )
+    }
 }
 
 pub fn serialize_json<T>(message: &T) -> Option<String>

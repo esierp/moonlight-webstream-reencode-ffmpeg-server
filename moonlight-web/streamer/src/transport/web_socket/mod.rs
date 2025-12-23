@@ -59,7 +59,7 @@ pub struct WebSocketTransportSender {
 
 #[async_trait]
 impl TransportSender for WebSocketTransportSender {
-    async fn setup_video(&self, setup: VideoSetup) -> i32 {
+    async fn setup_video(&self, _setup: VideoSetup) -> i32 {
         // empty
         0
     }

@@ -20,7 +20,6 @@ use webrtc::{
         extension::{
             HeaderExtension, abs_send_time_extension::AbsSendTimeExtension,
             playout_delay_extension::PlayoutDelayExtension,
-            transport_cc_extension::TransportCcExtension,
         },
     },
     rtp_transceiver::rtp_codec::{RTCRtpHeaderExtensionCapability, RTPCodecType},

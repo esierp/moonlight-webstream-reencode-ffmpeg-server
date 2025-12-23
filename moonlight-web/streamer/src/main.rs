@@ -30,7 +30,7 @@ use moonlight_common::{
         bindings::{
             ActiveGamepads, AudioConfig, Capabilities, ColorRange, ConnectionStatus,
             ControllerButtons, EncryptionFlags, HostFeatures, OpusMultistreamConfig, Stage,
-            SupportedVideoFormats, VideoFormat,
+            VideoFormat,
         },
         connection::ConnectionListener,
         video::VideoSetup,
@@ -150,6 +150,8 @@ async fn main() {
         ))
         .await;
 
+    info!("Received settings from browser client: {stream_settings}");
+
     // -- Create the host and pair it
     let mut host = MoonlightHost::new(host_address, host_http_port, client_unique_id)
         .expect("failed to create host");
@@ -210,7 +212,7 @@ struct StreamConnection {
     pub moonlight: MoonlightInstance,
     pub config: StreamerConfig,
     pub info: StreamInfo,
-    pub settings: StreamSettings,
+    pub settings: RwLock<StreamSettings>,
     pub ipc_sender: IpcSender<StreamerIpcMessage>,
     // Video
     pub stream_setup: Mutex<StreamSetup>,
@@ -236,7 +238,7 @@ impl StreamConnection {
             moonlight,
             config,
             info,
-            settings,
+            settings: RwLock::new(settings),
             ipc_sender,
             stream_setup: Mutex::new(StreamSetup {
                 video: None,
@@ -299,13 +301,19 @@ impl StreamConnection {
                             ipc_sender.send(message).await;
                         }
                         Ok(TransportEvent::StartStream { settings }) => {
-                            // TODO: set settings using the event
                             let Some(this) = this.upgrade() else {
                                 warn!(
                                     "Failed to get stream connection, stopping listening to events"
                                 );
                                 return;
                             };
+
+                            {
+                                info!("Applying new settings from transport: {settings}");
+
+                                let mut old_settings = this.settings.write().await;
+                                *old_settings = settings;
+                            }
 
                             if let Err(err) = this.start_stream().await {
                                 error!("Failed to start stream, stopping: {err:?}");
@@ -389,8 +397,8 @@ impl StreamConnection {
 
         let err = match packet {
             InboundPacket::General { message } => {
-                // TODO
-                todo!();
+                // currently there are no packets associated with that
+                match message {}
             }
             InboundPacket::MousePosition {
                 x,
@@ -553,28 +561,29 @@ impl StreamConnection {
         if let ServerIpcMessage::WebSocket(StreamClientMessage::SetTransport(transport_type)) =
             &message
         {
+            let settings = { self.settings.read().await.clone() };
+
             match transport_type {
                 TransportType::WebRTC => {
                     info!("Trying WebRTC transport");
 
-                    let (sender, events) =
-                        match webrtc::new(self.settings.clone(), &self.config.webrtc).await {
-                            Ok(value) => value,
-                            Err(err) => {
-                                // TODO: what now?
-                                todo!();
-                            }
-                        };
+                    let (sender, events) = match webrtc::new(settings, &self.config.webrtc).await {
+                        Ok(value) => value,
+                        Err(err) => {
+                            error!("Failed to start webrtc transport: {err}");
+                            return;
+                        }
+                    };
                     self.set_transport(Box::new(sender), Box::new(events)).await;
                 }
                 TransportType::WebSocket => {
                     info!("Trying Web Socket transport");
 
-                    let (sender, events) = match web_socket::new(self.settings.clone()).await {
+                    let (sender, events) = match web_socket::new(settings).await {
                         Ok(value) => value,
                         Err(err) => {
-                            // TODO: what now?
-                            todo!();
+                            error!("Failed to start web socket transport: {err}");
+                            return;
                         }
                     };
                     self.set_transport(Box::new(sender), Box::new(events)).await;
@@ -603,6 +612,9 @@ impl StreamConnection {
                 });
             }
         }
+        let settings = self.settings.read().await;
+
+        info!("Starting Moonlight stream with settings: {settings}");
 
         // Send stage
         let mut ipc_sender = self.ipc_sender.clone();
@@ -618,7 +630,7 @@ impl StreamConnection {
 
         let video_decoder = StreamVideoDecoder {
             stream: Arc::downgrade(self),
-            supported_formats: self.settings.video_supported_formats,
+            supported_formats: settings.video_supported_formats,
             stats: Default::default(),
         };
 
@@ -634,22 +646,22 @@ impl StreamConnection {
             .start_stream(
                 &self.moonlight,
                 self.info.app_id,
-                self.settings.width,
-                self.settings.height,
-                self.settings.fps,
+                settings.width,
+                settings.height,
+                settings.fps,
                 false,
                 true,
-                self.settings.play_audio_local,
+                settings.play_audio_local,
                 ActiveGamepads::empty(),
                 false,
-                self.settings.video_colorspace,
-                if self.settings.video_color_range_full {
+                settings.video_colorspace,
+                if settings.video_color_range_full {
                     ColorRange::Full
                 } else {
                     ColorRange::Limited
                 },
-                self.settings.bitrate,
-                self.settings.packet_size,
+                settings.bitrate,
+                settings.packet_size,
                 EncryptionFlags::all(),
                 connection_listener,
                 video_decoder,
@@ -691,13 +703,18 @@ impl StreamConnection {
 
             let video = setup.video.unwrap_or_else(|| {
                 warn!("failed to query video setup information. Giving the browser guessed information");
-                VideoSetup { format: VideoFormat::H264, width: self.settings.width, height: self.settings.height, redraw_rate: self.settings.fps, flags: 0 }
+                VideoSetup { format: VideoFormat::H264, width: settings.width, height: settings.height, redraw_rate: settings.fps, flags: 0 }
             });
 
-            let audio = setup.audio.clone().unwrap();
+            let audio = setup.audio.clone().unwrap_or(OpusMultistreamConfig::STEREO);
 
             (video, audio)
         };
+
+        info!(
+            "Stream uses these settings: {:?} with {}x{}x{}",
+            video_setup.format, video_setup.width, video_setup.height, video_setup.redraw_rate
+        );
 
         spawn(async move {
             ipc_sender

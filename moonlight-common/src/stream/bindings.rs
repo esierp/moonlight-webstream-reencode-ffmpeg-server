@@ -1,4 +1,8 @@
-use std::{ffi::CStr, fmt::Debug, time::Duration};
+use std::{
+    ffi::CStr,
+    fmt::{self, Debug, Display, Formatter},
+    time::Duration,
+};
 
 use bitflags::bitflags;
 use moonlight_common_sys::limelight::{
@@ -242,6 +246,24 @@ bitflags! {
     }
 }
 
+impl Display for SupportedVideoFormats {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+
+        let mut first = true;
+        for (name, _) in self.iter_names() {
+            if !first {
+                write!(f, ",")?;
+            }
+            write!(f, "{}", name)?;
+
+            first = false;
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, FromPrimitive)]
 pub enum VideoFormat {
@@ -386,6 +408,17 @@ pub struct OpusMultistreamConfig {
     pub coupled_streams: u32,
     pub samples_per_frame: u32,
     pub mapping: [u8; AUDIO_CONFIGURATION_MAX_CHANNEL_COUNT as usize],
+}
+
+impl OpusMultistreamConfig {
+    pub const STEREO: OpusMultistreamConfig = OpusMultistreamConfig {
+        sample_rate: 48000,
+        channel_count: 2,
+        streams: 1,
+        coupled_streams: 1,
+        samples_per_frame: 960,
+        mapping: [0, 1, 0, 0, 0, 0, 0, 0],
+    };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
