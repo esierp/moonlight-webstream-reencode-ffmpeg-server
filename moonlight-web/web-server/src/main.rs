@@ -76,30 +76,25 @@ async fn main() {
     // TODO: log config: anonymize ips when enabled in file
     // TODO: https://www.reddit.com/r/csharp/comments/166xgcl/comment/jynybpe/
 
-    let mut log_config = simplelog::ConfigBuilder::default();
+    let log_config = simplelog::ConfigBuilder::new()
+        .add_filter_ignore_str("actix_http::h1")
+        .build();
 
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
         config.log.level_filter,
-        log_config.build(),
+        log_config.clone(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )];
 
     if let Some(file_path) = &config.log.file_path {
-        if fs::try_exists(file_path)
-            .await
-            .expect("failed to check if log file exists")
-        {
-            // TODO: should we rename?
-        }
-
         let file = File::create(file_path)
             .await
             .expect("failed to open log file");
 
         loggers.push(WriteLogger::new(
             config.log.level_filter,
-            log_config.build(),
+            log_config,
             file.try_into_std()
                 .expect("failed to cast tokio file into std file"),
         ));

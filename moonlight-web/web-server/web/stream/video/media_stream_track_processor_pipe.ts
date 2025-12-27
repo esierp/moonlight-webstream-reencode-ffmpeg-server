@@ -1,4 +1,5 @@
 import { checkExecutionEnvironment } from "../pipeline/worker_pipe.js";
+import { allVideoCodecs } from "../video.js";
 import { FrameVideoRenderer, TrackVideoRenderer, VideoRendererInfo, VideoRendererSetup } from "./index.js";
 
 function wait(time: number): Promise<void> {
@@ -14,7 +15,8 @@ export class VideoMediaStreamTrackProcessorPipe<T extends FrameVideoRenderer> ex
     static async getInfo(): Promise<VideoRendererInfo> {
         // https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrackProcessor
         return {
-            executionEnvironment: await checkExecutionEnvironment("MediaStreamTrackProcessor")
+            executionEnvironment: await checkExecutionEnvironment("MediaStreamTrackProcessor"),
+            supportedCodecs: allVideoCodecs()
         }
     }
 
@@ -65,11 +67,11 @@ export class VideoMediaStreamTrackProcessorPipe<T extends FrameVideoRenderer> ex
         }
     }
 
-    setup(setup: VideoRendererSetup): void {
+    async setup(setup: VideoRendererSetup): Promise<void> {
         this.running = true
         this.readTrack()
 
-        this.base.setup(setup)
+        await this.base.setup(setup)
     }
     cleanup(): void {
         this.running = false

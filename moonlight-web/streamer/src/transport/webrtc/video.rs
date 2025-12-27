@@ -13,7 +13,7 @@ use moonlight_common::stream::{
     bindings::{DecodeResult, FrameType, SupportedVideoFormats, VideoDecodeUnit, VideoFormat},
     video::VideoSetup,
 };
-use tokio::runtime::Handle;
+use tokio::{runtime::Handle, sync::Mutex};
 use webrtc::{
     api::media_engine::{MIME_TYPE_AV1, MIME_TYPE_H264, MIME_TYPE_HEVC, MediaEngine},
     peer_connection::RTCPeerConnection,
@@ -73,20 +73,19 @@ pub struct WebRtcVideo {
 }
 
 impl WebRtcVideo {
-    pub fn new(
-        runtime: Handle,
-        peer: Weak<RTCPeerConnection>,
-        supported_video_formats: SupportedVideoFormats,
-        frame_queue_size: usize,
-    ) -> Self {
+    pub fn new(runtime: Handle, peer: Weak<RTCPeerConnection>, frame_queue_size: usize) -> Self {
         Self {
             clock_rate: 0,
             needs_idr: Default::default(),
             sender: TrackLocalSender::new(runtime, peer, frame_queue_size),
             codec: None,
-            supported_video_formats,
+            supported_video_formats: SupportedVideoFormats::empty(),
             samples: Default::default(),
         }
+    }
+
+    pub async fn set_codecs(&mut self, supported_codecs: SupportedVideoFormats) {
+        self.supported_video_formats = supported_codecs;
     }
 
     pub async fn setup(
@@ -109,11 +108,13 @@ impl WebRtcVideo {
                     .iter_names()
                     .collect::<Vec<_>>()
             );
+            // TODO: send error message to client
             return false;
         }
 
         let Some(codec) = video_format_to_codec(format) else {
             error!("Failed to get video codec with format {:?}", format);
+            // TODO: send error message to client
             return false;
         };
 
@@ -149,6 +150,7 @@ impl WebRtcVideo {
             error!(
                 "Failed to create video track with format {format:?} and codec \"{codec:?}\": {err:?}"
             );
+            // TODO: send error message to client
             return false;
         }
 
@@ -187,6 +189,8 @@ impl WebRtcVideo {
     }
 
     pub async fn send_decode_unit(&mut self, unit: &VideoDecodeUnit<'_>) -> DecodeResult {
+        trace!("Starting frame");
+
         let timestamp = (unit.presentation_time.as_secs_f64() * self.clock_rate as f64) as u32;
 
         let mut full_frame = Vec::new();
@@ -206,9 +210,14 @@ impl WebRtcVideo {
 
                 while let Ok(Some(nal)) = nal_reader.next_nal() {
                     trace!(
-                        "H264, Start Code: {:?}, NAL: {:?}, Bytes: {:?}",
-                        nal.start_code, nal.header, &nal.full
+                        "H264, Start Code: {:?}, NAL: {:?}, Bytes: {:02X?}",
+                        nal.start_code, nal.header, &nal.full,
                     );
+
+                    if nal.header.nal_unit_type == h264::NalUnitType::FillerData {
+                        trace!("Ignoring nal because it's filler data: {:?}", nal.header);
+                        continue;
+                    }
 
                     let data = trim_bytes_to_range(
                         nal.full,
@@ -237,7 +246,7 @@ impl WebRtcVideo {
 
                 while let Ok(Some(nal)) = nal_reader.next_nal() {
                     trace!(
-                        "H265, Start Code: {:?}, NAL: {:?}, Bytes: {:?}",
+                        "H265, Start Code: {:?}, NAL: {:?}, Bytes: {:02X?}",
                         nal.start_code,
                         nal.header,
                         &nal.full[0..20]
@@ -287,6 +296,8 @@ impl WebRtcVideo {
             }
         }
 
+        trace!("Ending frame frame");
+
         if self
             .needs_idr
             .compare_exchange_weak(true, false, Ordering::SeqCst, Ordering::Relaxed)
@@ -299,15 +310,8 @@ impl WebRtcVideo {
     }
 }
 
-pub fn register_video_codecs(
-    media_engine: &mut MediaEngine,
-    supported_video_formats: SupportedVideoFormats,
-) -> Result<(), webrtc::Error> {
+pub fn register_video_codecs(media_engine: &mut MediaEngine) -> Result<(), webrtc::Error> {
     for format in VideoFormat::all() {
-        if !format.contained_in(supported_video_formats) {
-            continue;
-        }
-
         let Some(codec) = video_format_to_codec(format) else {
             continue;
         };

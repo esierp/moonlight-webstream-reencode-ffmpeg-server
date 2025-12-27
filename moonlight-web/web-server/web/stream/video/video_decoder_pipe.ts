@@ -1,8 +1,34 @@
 import { ByteBuffer } from "../buffer.js";
 import { Logger } from "../log.js";
 import { checkExecutionEnvironment } from "../pipeline/worker_pipe.js";
-import { VIDEO_DECODER_CODECS } from "../video.js";
+import { emptyVideoCodecs, maybeVideoCodecs, VIDEO_DECODER_CODECS, VideoCodecSupport } from "../video.js";
 import { DataVideoRenderer, FrameVideoRenderer, VideoDecodeUnit, VideoRendererInfo, VideoRendererSetup } from "./index.js";
+
+async function detectCodecs(): Promise<VideoCodecSupport> {
+    if (!("isConfigSupported" in VideoDecoder)) {
+        return maybeVideoCodecs()
+    }
+
+    const codecs = emptyVideoCodecs()
+
+    for (const codec in codecs) {
+        // TODO: parallelize await?
+        const supported = await VideoDecoder.isConfigSupported({
+            codec: VIDEO_DECODER_CODECS[codec]
+        })
+
+        codecs[codec] = supported.supported ? true : false
+    }
+
+    return codecs
+}
+async function getIfConfigSupported(config: VideoDecoderConfig): Promise<VideoDecoderConfig | null> {
+    const supported = await VideoDecoder.isConfigSupported(config)
+    if (supported.supported) {
+        return config
+    }
+    return null
+}
 
 const START_CODE_SHORT = new Uint8Array([0x00, 0x00, 0x01]); // 3-byte start code
 const START_CODE_LONG = new Uint8Array([0x00, 0x00, 0x00, 0x01]); // 4-byte start code
@@ -15,13 +41,18 @@ function startsWith(buffer: Uint8Array, position: number, check: Uint8Array): bo
     return true
 }
 
+// TODO: this isn't working in firefox
 export class VideoDecoderPipe<T extends FrameVideoRenderer> extends DataVideoRenderer {
 
     static readonly baseType: "videoframe" = "videoframe"
 
     static async getInfo(): Promise<VideoRendererInfo> {
+        const supported = await checkExecutionEnvironment("VideoDecoder")
+
         return {
-            executionEnvironment: await checkExecutionEnvironment("VideoDecoder")
+            executionEnvironment: supported,
+            // TODO: if it's only supported in a worker check there, maybe directly in checkExecEnv?
+            supportedCodecs: supported.main ? await detectCodecs() : emptyVideoCodecs()
         }
     }
 
@@ -58,8 +89,8 @@ export class VideoDecoderPipe<T extends FrameVideoRenderer> extends DataVideoRen
 
     private translator: CodecStreamTranslator | null = null
 
-    setup(setup: VideoRendererSetup): void {
-        const codec = VIDEO_DECODER_CODECS.find(codec => codec.key == setup.format)
+    async setup(setup: VideoRendererSetup): Promise<void> {
+        const codec = VIDEO_DECODER_CODECS[setup.codec]
         if (!codec) {
             this.logger?.debug("Failed to get codec configuration for WebCodecs VideoDecoder", { type: "fatal" })
             return
@@ -67,31 +98,44 @@ export class VideoDecoderPipe<T extends FrameVideoRenderer> extends DataVideoRen
 
         let translator
 
-        if (setup.format == "H264" || setup.format == "H264_HIGH8_444") {
+        if (setup.codec == "H264" || setup.codec == "H264_HIGH8_444") {
             translator = new H264StreamVideoTranslator(this.logger ?? undefined)
-        } else if (setup.format == "H265" || setup.format == "H265_MAIN10" || setup.format == "H265_REXT8_444" || setup.format == "H265_REXT10_444") {
+        } else if (setup.codec == "H265" || setup.codec == "H265_MAIN10" || setup.codec == "H265_REXT8_444" || setup.codec == "H265_REXT10_444") {
             translator = new H265StreamVideoTranslator(this.logger ?? undefined)
-        } else if (setup.format == "AV1_MAIN8" || setup.format == "AV1_MAIN10" || setup.format == "AV1_HIGH8_444" || setup.format == "AV1_HIGH10_444") {
+        } else if (setup.codec == "AV1_MAIN8" || setup.codec == "AV1_MAIN10" || setup.codec == "AV1_HIGH8_444" || setup.codec == "AV1_HIGH10_444") {
             // TODO: av1?
             this.errored = true
             this.logger?.debug("Av1 stream translator is not implemented currently!")
             return
         } else {
             this.errored = true
-            this.logger?.debug(`Failed to find stream translator for codec ${setup.format}`)
+            this.logger?.debug(`Failed to find stream translator for codec ${setup.codec}`)
             return
         }
 
-        translator.setBaseConfig({
-            codec: codec.codec,
-            colorSpace: codec.colorSpace,
-            optimizeForLatency: true
-        })
+        let config
+        if (!config) {
+            config = await getIfConfigSupported({
+                codec,
+                hardwareAcceleration: "prefer-hardware",
+                optimizeForLatency: true
+            })
+        }
+        if (!config) {
+            config = await getIfConfigSupported({
+                codec,
+                optimizeForLatency: true
+            })
+        }
+        if (!config) {
+            config = { codec }
+        }
+
+        translator.setBaseConfig(config)
         this.translator = translator
 
-        this.base.setup(setup)
+        await this.base.setup(setup)
     }
-
 
     submitDecodeUnit(unit: VideoDecodeUnit): void {
         if (this.errored) {

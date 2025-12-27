@@ -17,7 +17,6 @@ use tokio::{
 };
 
 use crate::{
-    StreamSettings,
     api_bindings::{StreamClientMessage, StreamServerMessage},
     config::WebRtcConfig,
 };
@@ -33,7 +32,6 @@ pub struct StreamerConfig {
 pub enum ServerIpcMessage {
     Init {
         config: StreamerConfig,
-        stream_settings: StreamSettings,
         host_address: String,
         host_http_port: u16,
         client_unique_id: Option<String>,
@@ -41,6 +39,8 @@ pub enum ServerIpcMessage {
         client_certificate: Pem,
         server_certificate: Pem,
         app_id: u32,
+        video_frame_queue_size: usize,
+        audio_sample_queue_size: usize,
     },
     WebSocket(StreamClientMessage),
     WebSocketTransport(Bytes),

@@ -17,7 +17,6 @@ export type StreamSettings = {
     },
     fps: number
     videoCodec: StreamCodec,
-    videoForceCodec: boolean,
     canvasRenderer: boolean
     playAudioLocal: boolean
     audioSampleQueueSize: number
@@ -45,7 +44,6 @@ export function defaultStreamSettings(): StreamSettings {
             height: 1080,
         },
         videoCodec: "h264",
-        videoForceCodec: false,
         canvasRenderer: false,
         playAudioLocal: false,
         audioSampleQueueSize: 20,
@@ -96,7 +94,6 @@ export class StreamSettingsComponent implements Component {
     private packetSize: InputComponent
     private fps: InputComponent
     private videoCodec: SelectComponent
-    private videoForceCodec: InputComponent
     private canvasRenderer: InputComponent
 
     private videoSize: SelectComponent
@@ -234,13 +231,6 @@ export class StreamSettingsComponent implements Component {
         })
         this.videoCodec.addChangeListener(this.onSettingsChange.bind(this))
         this.videoCodec.mount(this.divElement)
-
-        // Force Codec
-        this.videoForceCodec = new InputComponent("videoForceCodec", "checkbox", "Force Video Codec", {
-            checked: settings?.videoForceCodec ?? defaultSettings.videoForceCodec
-        })
-        this.videoForceCodec.addChangeListener(this.onSettingsChange.bind(this))
-        this.videoForceCodec.mount(this.divElement)
 
         // Use Canvas Renderer
         this.canvasRenderer = new InputComponent("canvasRenderer", "checkbox", "Use Canvas Renderer (Experimental)", {
@@ -391,7 +381,6 @@ export class StreamSettingsComponent implements Component {
         }
         settings.videoFrameQueueSize = parseInt(this.videoSampleQueueSize.getValue())
         settings.videoCodec = this.videoCodec.getValue() as any
-        settings.videoForceCodec = this.videoForceCodec.isChecked()
         settings.canvasRenderer = this.canvasRenderer.isChecked()
 
         settings.playAudioLocal = this.playAudioLocal.isChecked()

@@ -85,7 +85,6 @@ async fn main() {
 
     let (
         config,
-        stream_settings,
         host_address,
         host_http_port,
         client_unique_id,
@@ -93,11 +92,12 @@ async fn main() {
         client_certificate,
         server_certificate,
         app_id,
+        video_frame_queue_size,
+        audio_sample_queue_size,
     ) = loop {
         match ipc_receiver.recv().await {
             Some(ServerIpcMessage::Init {
                 config,
-                stream_settings,
                 host_address,
                 host_http_port,
                 client_unique_id,
@@ -105,18 +105,11 @@ async fn main() {
                 client_certificate,
                 server_certificate,
                 app_id,
+                video_frame_queue_size,
+                audio_sample_queue_size,
             }) => {
-                debug!(
-                    "Client supported codecs: {:?}",
-                    stream_settings
-                        .video_supported_formats
-                        .iter_names()
-                        .collect::<Vec<_>>()
-                );
-
                 break (
                     config,
-                    stream_settings,
                     host_address,
                     host_http_port,
                     client_unique_id,
@@ -124,6 +117,8 @@ async fn main() {
                     client_certificate,
                     server_certificate,
                     app_id,
+                    video_frame_queue_size,
+                    audio_sample_queue_size,
                 );
             }
             _ => continue,
@@ -150,8 +145,6 @@ async fn main() {
         ))
         .await;
 
-    info!("Received settings from browser client: {stream_settings}");
-
     // -- Create the host and pair it
     let mut host = MoonlightHost::new(host_address, host_http_port, client_unique_id)
         .expect("failed to create host");
@@ -175,10 +168,11 @@ async fn main() {
             host: Mutex::new(host),
             app_id,
         },
-        stream_settings,
         ipc_sender.clone(),
         ipc_receiver,
         config,
+        video_frame_queue_size,
+        audio_sample_queue_size,
     )
     .await
     .expect("failed to create connection");
@@ -212,9 +206,10 @@ struct StreamConnection {
     pub moonlight: MoonlightInstance,
     pub config: StreamerConfig,
     pub info: StreamInfo,
-    pub settings: RwLock<StreamSettings>,
     pub ipc_sender: IpcSender<StreamerIpcMessage>,
     // Video
+    pub video_frame_queue_size: usize,
+    pub audio_sample_queue_size: usize,
     pub stream_setup: Mutex<StreamSetup>,
     // Stream
     pub stream: RwLock<Option<MoonlightStream>>,
@@ -228,22 +223,24 @@ impl StreamConnection {
     pub async fn new(
         moonlight: MoonlightInstance,
         info: StreamInfo,
-        settings: StreamSettings,
         ipc_sender: IpcSender<StreamerIpcMessage>,
         mut ipc_receiver: IpcReceiver<ServerIpcMessage>,
         config: StreamerConfig,
+        video_frame_queue_size: usize,
+        audio_sample_queue_size: usize,
     ) -> Result<Arc<Self>, anyhow::Error> {
         let this = Arc::new(Self {
             runtime: Handle::current(),
             moonlight,
             config,
             info,
-            settings: RwLock::new(settings),
             ipc_sender,
             stream_setup: Mutex::new(StreamSetup {
                 video: None,
                 audio: None,
             }),
+            video_frame_queue_size,
+            audio_sample_queue_size,
             stream: RwLock::new(None),
             active_gamepads: RwLock::new(ActiveGamepads::empty()),
             transport_sender: Mutex::new(None),
@@ -308,14 +305,7 @@ impl StreamConnection {
                                 return;
                             };
 
-                            {
-                                info!("Applying new settings from transport: {settings}");
-
-                                let mut old_settings = this.settings.write().await;
-                                *old_settings = settings;
-                            }
-
-                            if let Err(err) = this.start_stream().await {
+                            if let Err(err) = this.start_stream(settings).await {
                                 error!("Failed to start stream, stopping: {err:?}");
 
                                 this.stop().await;
@@ -561,13 +551,17 @@ impl StreamConnection {
         if let ServerIpcMessage::WebSocket(StreamClientMessage::SetTransport(transport_type)) =
             &message
         {
-            let settings = { self.settings.read().await.clone() };
-
             match transport_type {
                 TransportType::WebRTC => {
                     info!("Trying WebRTC transport");
 
-                    let (sender, events) = match webrtc::new(settings, &self.config.webrtc).await {
+                    let (sender, events) = match webrtc::new(
+                        &self.config.webrtc,
+                        self.video_frame_queue_size,
+                        self.audio_sample_queue_size,
+                    )
+                    .await
+                    {
                         Ok(value) => value,
                         Err(err) => {
                             error!("Failed to start webrtc transport: {err}");
@@ -579,7 +573,7 @@ impl StreamConnection {
                 TransportType::WebSocket => {
                     info!("Trying Web Socket transport");
 
-                    let (sender, events) = match web_socket::new(settings).await {
+                    let (sender, events) = match web_socket::new().await {
                         Ok(value) => value,
                         Err(err) => {
                             error!("Failed to start web socket transport: {err}");
@@ -602,7 +596,7 @@ impl StreamConnection {
     }
 
     // Start Moonlight Stream
-    async fn start_stream(self: &Arc<Self>) -> Result<(), anyhow::Error> {
+    async fn start_stream(self: &Arc<Self>, settings: StreamSettings) -> Result<(), anyhow::Error> {
         // We might already be streaming -> remove and wait for connection close firstly
         {
             let mut stream = self.stream.write().await;
@@ -612,8 +606,6 @@ impl StreamConnection {
                 });
             }
         }
-        let settings = self.settings.read().await;
-
         info!("Starting Moonlight stream with settings: {settings}");
 
         // Send stage

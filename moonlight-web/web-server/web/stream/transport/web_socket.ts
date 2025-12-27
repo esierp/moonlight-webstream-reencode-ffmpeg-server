@@ -1,6 +1,7 @@
 import { TransportChannelId } from "../../api_bindings.js";
 import { ByteBuffer } from "../buffer.js";
 import { Logger } from "../log.js";
+import { allVideoCodecs, VideoCodecSupport } from "../video.js";
 import { DataTransportChannel, Transport, TransportAudioSetup, TransportChannel, TransportChannelIdKey, TransportChannelIdValue, TransportShutdown, TransportVideoSetup } from "./index.js";
 
 export class WebSocketTransport implements Transport {
@@ -35,11 +36,13 @@ export class WebSocketTransport implements Transport {
         return this.channels[id]
     }
 
-    async setupHostVideo(setup: TransportVideoSetup): Promise<void> {
+    async setupHostVideo(setup: TransportVideoSetup): Promise<VideoCodecSupport> {
         if (setup.type.indexOf("data") == -1) {
             this.logger?.debug("Cannot use Web Socket Transport: Found no supported video pipeline")
             throw "Cannot use Web Socket Transport: Found no supported video pipeline"
         }
+
+        return allVideoCodecs()
     }
     async setupHostAudio(setup: TransportAudioSetup): Promise<void> {
         if (setup.type.indexOf("data") == -1) {

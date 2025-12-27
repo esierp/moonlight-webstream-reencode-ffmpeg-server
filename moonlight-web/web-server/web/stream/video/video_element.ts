@@ -1,12 +1,41 @@
+import { emptyVideoCodecs, maybeVideoCodecs, VIDEO_DECODER_CODECS, VideoCodecSupport } from "../video.js";
 import { getStreamRectCorrected, TrackVideoRenderer, VideoRendererInfo, VideoRendererSetup } from "./index.js";
+
+function detectCodecs(): VideoCodecSupport {
+    if (!("canPlayType" in HTMLVideoElement.prototype)) {
+        return maybeVideoCodecs()
+    }
+
+    const codecs = emptyVideoCodecs()
+
+    const testElement = document.createElement("video")
+
+    for (const codec in codecs) {
+        const supported = testElement.canPlayType(`video/mp4; codecs=${VIDEO_DECODER_CODECS[codec]}`)
+
+        if (supported == "probably") {
+            codecs[codec] = true
+        } else if (supported == "maybe") {
+            codecs[codec] = "maybe"
+        } else {
+            // unsupported
+            codecs[codec] = false
+        }
+    }
+
+    return codecs
+}
 
 export class VideoElementRenderer extends TrackVideoRenderer {
     static async getInfo(): Promise<VideoRendererInfo> {
+        const supported = "HTMLVideoElement" in window && "srcObject" in HTMLVideoElement.prototype
+
         return {
             executionEnvironment: {
-                main: "HTMLVideoElement" in window && "srcObject" in HTMLVideoElement.prototype,
+                main: supported,
                 worker: false
-            }
+            },
+            supportedCodecs: supported ? detectCodecs() : emptyVideoCodecs()
         }
     }
 
@@ -41,7 +70,7 @@ export class VideoElementRenderer extends TrackVideoRenderer {
         }
     }
 
-    setup(setup: VideoRendererSetup): void {
+    async setup(setup: VideoRendererSetup): Promise<void> {
         this.size = [setup.width, setup.height]
     }
     cleanup(): void {

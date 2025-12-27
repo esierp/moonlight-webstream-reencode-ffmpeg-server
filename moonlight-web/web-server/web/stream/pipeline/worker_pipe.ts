@@ -44,7 +44,7 @@ export class WorkerPipeline {
 }
 
 export class WorkerDataInput extends VideoRenderer {
-    setup(setup: VideoRendererSetup): void {
+    async setup(setup: VideoRendererSetup): Promise<void> {
         throw new Error("Method not implemented.");
     }
     cleanup(): void {

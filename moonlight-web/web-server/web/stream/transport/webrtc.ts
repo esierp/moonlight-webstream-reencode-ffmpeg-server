@@ -1,5 +1,6 @@
 import { StreamSignalingMessage, TransportChannelId } from "../../api_bindings.js";
 import { Logger } from "../log.js";
+import { allVideoCodecs, CAPABILITIES_CODECS, emptyVideoCodecs, maybeVideoCodecs, VideoCodecSupport } from "../video.js";
 import { DataTransportChannel, Transport, TRANSPORT_CHANNEL_OPTIONS, TransportAudioSetup, TransportChannel, TransportChannelIdKey, TransportChannelIdValue, TransportVideoSetup, AudioTrackTransportChannel, VideoTrackTransportChannel, TrackTransportChannel, TransportShutdown } from "./index.js";
 
 export class WebRTCTransport implements Transport {
@@ -104,15 +105,17 @@ export class WebRTCTransport implements Transport {
     private async handleRemoteDescription(sdp: RTCSessionDescriptionInit | null) {
         this.logger?.debug(`Received remote description: ${sdp?.type}`)
 
-        this.remoteDescription = sdp
+        const remoteDescription = sdp
+        this.remoteDescription = remoteDescription
         if (!this.peer) {
             return
         }
+        this.remoteDescription = null
 
-        if (this.remoteDescription) {
-            await this.peer.setRemoteDescription(this.remoteDescription)
+        if (remoteDescription) {
+            await this.peer.setRemoteDescription(remoteDescription)
 
-            if (this.remoteDescription.type == "offer") {
+            if (remoteDescription.type == "offer") {
                 await this.peer.setLocalDescription()
                 const localDescription = this.peer.localDescription
                 if (!localDescription) {
@@ -128,8 +131,6 @@ export class WebRTCTransport implements Transport {
                     }
                 })
             }
-
-            this.remoteDescription = null
         }
     }
 
@@ -258,9 +259,6 @@ export class WebRTCTransport implements Transport {
 
             const id = TransportChannelId[channel]
             const dataChannel = this.peer.createDataChannel(channel.toLowerCase(), {
-                // TODO: use id
-                // id,
-                // negotiated: true,
                 ordered: options.ordered,
                 maxRetransmits: options.reliable ? undefined : 0
             })
@@ -302,8 +300,43 @@ export class WebRTCTransport implements Transport {
         }
     }
 
-    async setupHostVideo(_setup: TransportVideoSetup): Promise<void> {
+    async setupHostVideo(_setup: TransportVideoSetup): Promise<VideoCodecSupport> {
         // TODO: check transport type
+
+        let capabilities
+        if ("getCapabilities" in RTCRtpReceiver && (capabilities = RTCRtpReceiver.getCapabilities("video"))) {
+            const codecs = emptyVideoCodecs()
+
+            for (const codec in codecs) {
+                const supportRequirements = CAPABILITIES_CODECS[codec]
+
+                if (!supportRequirements) {
+                    continue
+                }
+
+                let supported = false
+                capabilityCodecLoop: for (const codecCapability of capabilities.codecs) {
+                    if (codecCapability.mimeType != supportRequirements.mimeType) {
+                        continue
+                    }
+
+                    for (const fmtpLine of supportRequirements.fmtpLine) {
+                        if (!codecCapability.sdpFmtpLine?.includes(fmtpLine)) {
+                            continue capabilityCodecLoop
+                        }
+                    }
+
+                    supported = true
+                    break
+                }
+
+                codecs[codec] = supported
+            }
+
+            return codecs
+        } else {
+            return maybeVideoCodecs()
+        }
     }
 
     async setupHostAudio(_setup: TransportAudioSetup): Promise<void> {

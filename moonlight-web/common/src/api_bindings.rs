@@ -368,20 +368,22 @@ pub enum StreamClientMessage {
     Init {
         host_id: u32,
         app_id: u32,
+        video_frame_queue_size: usize,
+        audio_sample_queue_size: usize,
+    },
+    WebRtc(StreamSignalingMessage),
+    SetTransport(TransportType),
+    StartStream {
         bitrate: u32,
         packet_size: u32,
         fps: u32,
         width: u32,
         height: u32,
-        video_frame_queue_size: u32,
         play_audio_local: bool,
-        audio_sample_queue_size: u32,
         video_supported_formats: u32,
         video_colorspace: StreamColorspace,
         video_color_range_full: bool,
     },
-    WebRtc(StreamSignalingMessage),
-    SetTransport(TransportType),
 }
 
 #[derive(Serialize, Deserialize, Debug, TS, Clone, Default)]
@@ -1038,9 +1040,9 @@ impl From<StreamColorspace> for Colorspace {
     }
 }
 
-// Video Supported Formats
+// Video Supported Codec
 ts_consts!(
-    pub StreamSupportedVideoFormats(export_bindings_supported_video_formats: EXPORT_PATH):
+    pub StreamSupportedVideoCodecs(export_bindings_supported_video_codecs: EXPORT_PATH):
 
     pub const H264: u32 = SupportedVideoFormats::H264.bits();
     pub const H264_HIGH8_444: u32 = SupportedVideoFormats::H264_HIGH8_444.bits();

@@ -1,4 +1,5 @@
 import { checkExecutionEnvironment } from "../pipeline/worker_pipe.js";
+import { allVideoCodecs } from "../video.js";
 import { FrameVideoRenderer, TrackVideoRenderer, VideoRendererInfo, VideoRendererSetup } from "./index.js";
 
 export class VideoTrackGeneratorPipe<T extends TrackVideoRenderer> extends FrameVideoRenderer {
@@ -8,7 +9,8 @@ export class VideoTrackGeneratorPipe<T extends TrackVideoRenderer> extends Frame
     static async getInfo(): Promise<VideoRendererInfo> {
         // https://developer.mozilla.org/en-US/docs/Web/API/VideoTrackGenerator
         return {
-            executionEnvironment: await checkExecutionEnvironment("VideoTrackGenerator")
+            executionEnvironment: await checkExecutionEnvironment("VideoTrackGenerator"),
+            supportedCodecs: allVideoCodecs()
         }
     }
 
@@ -35,8 +37,8 @@ export class VideoTrackGeneratorPipe<T extends TrackVideoRenderer> extends Frame
         this.writer.write(frame)
     }
 
-    setup(setup: VideoRendererSetup): void {
-        this.base.setup(setup)
+    async setup(setup: VideoRendererSetup): Promise<void> {
+        await this.base.setup(setup)
     }
     cleanup(): void {
         this.base.cleanup()

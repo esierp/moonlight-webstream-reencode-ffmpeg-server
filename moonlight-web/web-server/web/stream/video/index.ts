@@ -1,14 +1,15 @@
 import { Component } from "../../component/index.js"
-import { StreamSupportedVideoFormats } from "../../api_bindings.js"
+import { StreamSupportedVideoCodecs } from "../../api_bindings.js"
 import { ExecutionEnvironment } from "../index.js"
-import { ToMainMessage, ToWorkerMessage } from "../pipeline/worker_types.js"
+import { VideoCodecSupport } from "../video.js"
 
 export type VideoRendererInfo = {
     executionEnvironment: ExecutionEnvironment
+    supportedCodecs: VideoCodecSupport
 }
 
 export type VideoRendererSetup = {
-    format: keyof typeof StreamSupportedVideoFormats,
+    codec: keyof typeof StreamSupportedVideoCodecs,
     width: number
     height: number
     fps: number
@@ -22,7 +23,7 @@ export abstract class VideoRenderer implements Component {
     }
 
     /// Returns the success
-    abstract setup(setup: VideoRendererSetup): void
+    abstract setup(setup: VideoRendererSetup): Promise<void>
     abstract cleanup(): void
 
     abstract onUserInteraction(): void

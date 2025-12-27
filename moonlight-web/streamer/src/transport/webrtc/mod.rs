@@ -18,7 +18,9 @@ use common::{
 };
 use log::{debug, error, info, trace, warn};
 use moonlight_common::stream::{
-    bindings::{AudioConfig, DecodeResult, OpusMultistreamConfig, VideoDecodeUnit},
+    bindings::{
+        AudioConfig, DecodeResult, OpusMultistreamConfig, SupportedVideoFormats, VideoDecodeUnit,
+    },
     video::VideoSetup,
 };
 use tokio::{
@@ -73,7 +75,6 @@ mod video;
 
 struct WebRtcInner {
     peer: Arc<RTCPeerConnection>,
-    stream_settings: StreamSettings,
     event_sender: Sender<TransportEvent>,
     general_channel: Arc<RTCDataChannel>,
     stats_channel: Mutex<Option<Arc<RTCDataChannel>>>,
@@ -84,8 +85,9 @@ struct WebRtcInner {
 }
 
 pub async fn new(
-    stream_settings: StreamSettings,
     config: &WebRtcConfig,
+    video_frame_queue_size: usize,
+    audio_sample_queue_size: usize,
 ) -> Result<(WebRTCTransportSender, WebRTCTransportEvents), anyhow::Error> {
     // -- Configure WebRTC
     let rtc_config = RTCConfiguration {
@@ -130,8 +132,7 @@ pub async fn new(
     // TODO: register them based on the sdp
     let mut api_media = MediaEngine::default();
     register_audio_codecs(&mut api_media).expect("failed to register audio codecs");
-    register_video_codecs(&mut api_media, stream_settings.video_supported_formats)
-        .expect("failed to register video codecs");
+    register_video_codecs(&mut api_media).expect("failed to register video codecs");
     register_header_extensions(&mut api_media).expect("failed to register header extensions");
 
     // -- Build Api
@@ -156,20 +157,18 @@ pub async fn new(
     let runtime = Handle::current();
     let this_owned = Arc::new(WebRtcInner {
         peer: peer.clone(),
-        stream_settings: stream_settings.clone(),
         event_sender,
         general_channel,
         stats_channel: Mutex::new(None),
         video: Mutex::new(WebRtcVideo::new(
             runtime.clone(),
             Arc::downgrade(&peer),
-            stream_settings.video_supported_formats,
-            stream_settings.video_frame_queue_size as usize,
+            video_frame_queue_size,
         )),
         audio: Mutex::new(WebRtcAudio::new(
             runtime,
             Arc::downgrade(&peer),
-            stream_settings.audio_sample_queue_size as usize,
+            audio_sample_queue_size,
         )),
         timeout_terminate_request: Mutex::new(None),
     });
@@ -278,17 +277,7 @@ impl WebRtcInner {
     async fn on_ice_connection_state_change(self: &Arc<Self>, _state: RTCIceConnectionState) {}
     async fn on_peer_connection_state_change(self: Arc<Self>, state: RTCPeerConnectionState) {
         #[allow(clippy::collapsible_if)]
-        if matches!(state, RTCPeerConnectionState::Connected) {
-            if let Err(err) = self
-                .event_sender
-                .send(TransportEvent::StartStream {
-                    settings: self.stream_settings.clone(),
-                })
-                .await
-            {
-                warn!("Failed to send peer connected event to stream: {err:?}");
-            }
-        } else if matches!(state, RTCPeerConnectionState::Closed) {
+        if matches!(state, RTCPeerConnectionState::Closed) {
             if let Err(err) = self.event_sender.send(TransportEvent::Closed).await {
                 warn!("Failed to send peer closed event to stream: {err:?}");
                 self.request_terminate().await;
@@ -347,7 +336,7 @@ impl WebRtcInner {
     async fn send_offer(&self) -> bool {
         let local_description = match self.peer.create_offer(None).await {
             Err(err) => {
-                warn!("[Signaling]: failed to create offer: {err:?}");
+                error!("[Signaling]: failed to create offer: {err:?}");
                 return false;
             }
             Ok(value) => value,
@@ -358,7 +347,7 @@ impl WebRtcInner {
             .set_local_description(local_description.clone())
             .await
         {
-            warn!("[Signaling]: failed to set local description: {err:?}");
+            error!("[Signaling]: failed to set local description: {err:?}");
             return false;
         }
 
@@ -387,6 +376,46 @@ impl WebRtcInner {
 
     async fn on_ws_message(&self, message: StreamClientMessage) {
         match message {
+            StreamClientMessage::StartStream {
+                bitrate,
+                packet_size,
+                fps,
+                width,
+                height,
+                play_audio_local,
+                video_supported_formats,
+                video_colorspace,
+                video_color_range_full,
+            } => {
+                let video_supported_formats = SupportedVideoFormats::from_bits(video_supported_formats).unwrap_or_else(|| {
+                    warn!("Failed to deserialize SupportedVideoFormats: {video_supported_formats}, falling back to only H264");
+                    SupportedVideoFormats::H264
+                });
+                {
+                    let mut video = self.video.lock().await;
+                    video.set_codecs(video_supported_formats).await;
+                }
+
+                // TODO: check peer for supported formats via sdp
+
+                // TODO: remove unwrap
+                self.event_sender
+                    .send(TransportEvent::StartStream {
+                        settings: StreamSettings {
+                            bitrate,
+                            packet_size,
+                            fps,
+                            width,
+                            height,
+                            video_supported_formats,
+                            video_color_range_full,
+                            video_colorspace: video_colorspace.into(),
+                            play_audio_local,
+                        },
+                    })
+                    .await
+                    .unwrap();
+            }
             StreamClientMessage::WebRtc(StreamSignalingMessage::Description(description)) => {
                 debug!("[Signaling] Received Remote Description: {:?}", description);
 
@@ -395,7 +424,7 @@ impl WebRtcInner {
                     RtcSdpType::Answer => RTCSessionDescription::answer(description.sdp),
                     RtcSdpType::Pranswer => RTCSessionDescription::pranswer(description.sdp),
                     _ => {
-                        warn!(
+                        error!(
                             "[Signaling]: failed to handle RTCSdpType {:?}",
                             description.ty
                         );
@@ -404,13 +433,13 @@ impl WebRtcInner {
                 };
 
                 let Ok(description) = description else {
-                    warn!("[Signaling]: Received invalid RTCSessionDescription");
+                    error!("[Signaling]: Received invalid RTCSessionDescription");
                     return;
                 };
 
                 let remote_ty = description.sdp_type;
                 if let Err(err) = self.peer.set_remote_description(description).await {
-                    warn!("[Signaling]: failed to set remote description: {err:?}");
+                    error!("[Signaling]: failed to set remote description: {err:?}");
                     return;
                 }
 

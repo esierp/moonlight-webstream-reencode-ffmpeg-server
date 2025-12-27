@@ -8,7 +8,7 @@ import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sideba
 import { defaultStreamInputConfig, MouseMode, ScreenKeyboardSetVisibleEvent, StreamInputConfig } from "./stream/input.js";
 import { defaultStreamSettings, getLocalStreamSettings, StreamSettings } from "./component/settings_menu.js";
 import { SelectComponent } from "./component/input.js";
-import { emptyVideoFormats, getSupportedVideoFormats, hasAnyCodec } from "./stream/video.js";
+import { allVideoCodecs, emptyVideoCodecs, hasAnyCodec } from "./stream/video.js";
 import { StreamCapabilities, StreamKeys } from "./api_bindings.js";
 import { ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
 import { FormModal } from "./component/modal/form.js";
@@ -164,63 +164,7 @@ class ViewerApp implements Component {
             edge: settings.sidebarEdge,
         })
 
-        let supportedVideoFormats = await getSupportedVideoFormats()
-        if (settings.videoCodec == "h264") {
-            const newSupportedVideoFormats = emptyVideoFormats()
-
-            newSupportedVideoFormats.H264 = supportedVideoFormats.H264
-            newSupportedVideoFormats.H264_HIGH8_444 = supportedVideoFormats.H264_HIGH8_444
-
-            if (settings.videoForceCodec) {
-                newSupportedVideoFormats.H264 = true
-            }
-
-            supportedVideoFormats = newSupportedVideoFormats
-        } else if (settings.videoCodec == "h265") {
-            const newSupportedVideoFormats = emptyVideoFormats()
-
-            newSupportedVideoFormats.H265 = supportedVideoFormats.H265
-            newSupportedVideoFormats.H265_MAIN10 = supportedVideoFormats.H265_MAIN10
-            newSupportedVideoFormats.H265_REXT8_444 = supportedVideoFormats.H265_REXT8_444
-            newSupportedVideoFormats.H265_REXT10_444 = supportedVideoFormats.H265_REXT10_444
-
-            if (settings.videoForceCodec) {
-                newSupportedVideoFormats.H265 = true
-            }
-
-            supportedVideoFormats = newSupportedVideoFormats
-        } else if (settings.videoCodec == "av1") {
-            const newSupportedVideoFormats = emptyVideoFormats()
-
-            newSupportedVideoFormats.AV1 = supportedVideoFormats.AV1
-            newSupportedVideoFormats.AV1_MAIN8 = supportedVideoFormats.AV1_MAIN8
-            newSupportedVideoFormats.AV1_MAIN10 = supportedVideoFormats.AV1_MAIN10
-            newSupportedVideoFormats.AV1_REXT8_444 = supportedVideoFormats.AV1_REXT8_444
-            newSupportedVideoFormats.AV1_REXT10_444 = supportedVideoFormats.AV1_REXT10_444
-
-            if (settings.videoForceCodec) {
-                newSupportedVideoFormats.AV1 = true
-            }
-
-            supportedVideoFormats = newSupportedVideoFormats
-        } else if (settings.videoCodec == "auto") {
-            // do nothing
-        }
-
-        if (!settings.videoForceCodec) {
-            // TODO: make this and the standard supported video formats
-            supportedVideoFormats.H264 = true
-        } else {
-            // TODO: use logger
-            console.info(`Forcing the video codec!`)
-        }
-
-        if (!hasAnyCodec(supportedVideoFormats)) {
-            // TODO: use the logger and log via fatal
-            throw "Couldn't find any supported video format. Change the codec option to H264 in the settings if you're unsure which codecs are supported."
-        }
-
-        this.stream = new Stream(this.api, hostId, appId, settings, supportedVideoFormats, browserSize)
+        this.stream = new Stream(this.api, hostId, appId, settings, browserSize)
 
         // Add app info listener
         this.stream.addInfoListener(this.onInfo.bind(this))

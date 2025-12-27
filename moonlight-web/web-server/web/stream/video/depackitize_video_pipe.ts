@@ -1,4 +1,5 @@
 import { ByteBuffer } from "../buffer.js";
+import { allVideoCodecs } from "../video.js";
 import { DataVideoRenderer, VideoRenderer, VideoRendererInfo, VideoRendererSetup } from "./index.js";
 
 export class DepacketizeVideoPipe<T extends DataVideoRenderer> extends VideoRenderer {
@@ -13,7 +14,8 @@ export class DepacketizeVideoPipe<T extends DataVideoRenderer> extends VideoRend
             executionEnvironment: {
                 main: true,
                 worker: true
-            }
+            },
+            supportedCodecs: allVideoCodecs()
         }
     }
 
@@ -47,8 +49,8 @@ export class DepacketizeVideoPipe<T extends DataVideoRenderer> extends VideoRend
         })
     }
 
-    setup(setup: VideoRendererSetup): void {
-        this.base.setup(setup)
+    async setup(setup: VideoRendererSetup): Promise<void> {
+        await this.base.setup(setup)
         this.frameDurationMicroseconds = 1000000 / setup.fps
     }
     cleanup(): void {

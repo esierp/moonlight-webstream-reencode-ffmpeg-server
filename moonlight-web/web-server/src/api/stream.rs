@@ -6,7 +6,6 @@ use actix_web::{
 };
 use actix_ws::{Closed, Message, Session};
 use common::{
-    StreamSettings,
     api_bindings::{
         PostCancelRequest, PostCancelResponse, StreamClientMessage, StreamServerMessage,
     },
@@ -14,7 +13,6 @@ use common::{
     serialize_json,
 };
 use log::{debug, error, info, warn};
-use moonlight_common::stream::bindings::SupportedVideoFormats;
 use tokio::{process::Command, spawn};
 
 use crate::app::{
@@ -65,17 +63,8 @@ pub async fn start_host(
         let StreamClientMessage::Init {
             host_id,
             app_id,
-            bitrate,
-            packet_size,
-            fps,
-            width,
-            height,
             video_frame_queue_size,
-            play_audio_local,
             audio_sample_queue_size,
-            video_supported_formats,
-            video_colorspace,
-            video_color_range_full,
         } = message
         else {
             let _ = session.close(None).await;
@@ -86,24 +75,6 @@ pub async fn start_host(
 
         let host_id = HostId(host_id);
         let app_id = AppId(app_id);
-
-        let stream_settings = StreamSettings {
-            bitrate,
-            packet_size,
-            fps,
-            width,
-            height,
-            video_frame_queue_size,
-            audio_sample_queue_size,
-            play_audio_local,
-            video_supported_formats: SupportedVideoFormats::from_bits(video_supported_formats)
-                .unwrap_or_else(|| {
-                    warn!("[Stream]: Received invalid supported video formats");
-                    SupportedVideoFormats::H264
-                }),
-            video_colorspace: video_colorspace.into(),
-            video_color_range_full,
-        };
 
         // -- Collect host data
         let mut host = match user.host(host_id).await {
@@ -274,7 +245,6 @@ pub async fn start_host(
                     webrtc: web_app.config().webrtc.clone(),
                     log_level: web_app.config().log.level_filter,
                 },
-                stream_settings,
                 host_address: address,
                 host_http_port: http_port,
                 client_unique_id: Some(client_unique_id),
@@ -282,6 +252,8 @@ pub async fn start_host(
                 client_certificate: pair_info.client_certificate,
                 server_certificate: pair_info.server_certificate,
                 app_id: app_id.0,
+                video_frame_queue_size,
+                audio_sample_queue_size,
             })
             .await;
 
