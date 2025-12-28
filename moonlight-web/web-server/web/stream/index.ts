@@ -7,7 +7,7 @@ import { AudioPlayer } from "./audio/index.js"
 import { buildAudioPipeline } from "./audio/pipeline.js"
 import { BIG_BUFFER } from "./buffer.js"
 import { defaultStreamInputConfig, StreamInput } from "./input.js"
-import { Logger } from "./log.js"
+import { Logger, LogMessageInfo } from "./log.js"
 import { StreamStats } from "./stats.js"
 import { Transport, TransportShutdown } from "./transport/index.js"
 import { WebSocketTransport } from "./transport/web_socket.js"
@@ -24,12 +24,9 @@ export type ExecutionEnvironment = {
 export type InfoEvent = CustomEvent<
     { type: "app", app: App } |
     { type: "serverMessage", message: string } |
-    { type: "stageStarting" | "stageComplete", stage: string } |
-    { type: "stageFailed", stage: string, errorCode: number } |
     { type: "connectionComplete", capabilities: StreamCapabilities } |
     { type: "connectionStatus", status: ConnectionStatus } |
-    { type: "connectionTerminated", errorCode: number } |
-    { type: "addDebugLine", line: string, additional?: "fatal" | "recover" }
+    { type: "addDebugLine", line: string, additional?: LogMessageInfo }
 >
 export type InfoEventListener = (event: InfoEvent) => void
 
@@ -105,7 +102,7 @@ export class Stream implements Component {
 
     constructor(api: Api, hostId: number, appId: number, settings: StreamSettings, viewerScreenSize: [number, number]) {
         this.logger.addInfoListener((info, type) => {
-            this.debugLog(info, type ?? undefined)
+            this.debugLog(info, { type: type ?? undefined })
         })
 
         this.api = api
@@ -149,10 +146,10 @@ export class Stream implements Component {
         this.stats = new StreamStats()
     }
 
-    private debugLog(message: string, type?: "fatal" | "recover") {
+    private debugLog(message: string, additional?: LogMessageInfo) {
         for (const line of message.split("\n")) {
             const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "addDebugLine", line, additional: type }
+                detail: { type: "addDebugLine", line, additional }
             })
 
             this.eventTarget.dispatchEvent(event)
@@ -160,36 +157,12 @@ export class Stream implements Component {
     }
 
     private async onMessage(message: StreamServerMessage) {
-        if (typeof message == "string") {
-            const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "serverMessage", message }
-            })
+        if ("DebugLog" in message) {
+            const debugLog = message.DebugLog
 
-            this.eventTarget.dispatchEvent(event)
-        } else if ("StageStarting" in message) {
-            const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "stageStarting", stage: message.StageStarting.stage }
+            this.debugLog(debugLog.message, {
+                type: debugLog.ty ?? undefined
             })
-
-            this.eventTarget.dispatchEvent(event)
-        } else if ("StageComplete" in message) {
-            const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "stageComplete", stage: message.StageComplete.stage }
-            })
-
-            this.eventTarget.dispatchEvent(event)
-        } else if ("StageFailed" in message) {
-            const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "stageFailed", stage: message.StageFailed.stage, errorCode: message.StageFailed.error_code }
-            })
-
-            this.eventTarget.dispatchEvent(event)
-        } else if ("ConnectionTerminated" in message) {
-            const event: InfoEvent = new CustomEvent("stream-info", {
-                detail: { type: "connectionTerminated", errorCode: message.ConnectionTerminated.error_code }
-            })
-
-            this.eventTarget.dispatchEvent(event)
         } else if ("UpdateApp" in message) {
             const event: InfoEvent = new CustomEvent("stream-info", {
                 detail: { type: "app", app: message.UpdateApp.app }
@@ -208,7 +181,7 @@ export class Stream implements Component {
 
             const format = getSelectedVideoCodec(formatRaw)
             if (format == null) {
-                this.debugLog(`Video Format ${formatRaw} was not found! Couldn't start stream!`, "fatal")
+                this.debugLog(`Video Format ${formatRaw} was not found! Couldn't start stream!`, { type: "fatal" })
                 return
             }
 
@@ -277,7 +250,7 @@ export class Stream implements Component {
             await this.tryWebSocketTransport()
         }
 
-        this.debugLog("Tried all configured transport options but no connection was possible", "fatal")
+        this.debugLog("Tried all configured transport options but no connection was possible", { type: "fatal" })
     }
 
     private transport: Transport | null = null
@@ -317,7 +290,9 @@ export class Stream implements Component {
 
         const videoCodecSupport = await this.createPipelines()
         if (!videoCodecSupport) {
-            // TODO: error?
+            this.debugLog("No video pipeline was found for the codec that was specified. If you're unsure which codecs are supported use H264.", { type: "fatalDescription" })
+
+            await transport.close()
             return "failednoconnect"
         }
 
@@ -342,7 +317,7 @@ export class Stream implements Component {
 
         const videoCodecSupport = await this.createPipelines()
         if (!videoCodecSupport) {
-            this.debugLog("Failed to start stream because no video pipeline was found!", "fatal")
+            this.debugLog("Failed to start stream because no video pipeline with support for the specified codec was found!", { type: "fatal" })
             return
         }
 

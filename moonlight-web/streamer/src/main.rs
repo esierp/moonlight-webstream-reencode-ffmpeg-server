@@ -12,7 +12,7 @@ use std::{
 
 use common::{
     StreamSettings,
-    api_bindings::{GeneralServerMessage, StreamClientMessage, TransportType},
+    api_bindings::{GeneralServerMessage, LogMessageType, StreamClientMessage, TransportType},
     ipc::{
         IpcReceiver, IpcSender, ServerIpcMessage, StreamerConfig, StreamerIpcMessage,
         create_process_ipc,
@@ -77,8 +77,9 @@ async fn main() {
     // Send stage
     ipc_sender
         .send(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::StageComplete {
-                stage: "Launch Streamer".to_string(),
+            StreamServerMessage::DebugLog {
+                message: "Completed Stage: Launch Streamer".to_string(),
+                ty: None,
             },
         ))
         .await;
@@ -139,8 +140,9 @@ async fn main() {
     // Send stage
     ipc_sender
         .send(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::StageStarting {
-                stage: "Waiting for Transport to negotiate".to_string(),
+            StreamServerMessage::DebugLog {
+                message: "Waiting for Transport to negotiate".to_string(),
+                ty: None,
             },
         ))
         .await;
@@ -305,11 +307,14 @@ impl StreamConnection {
                                 return;
                             };
 
-                            if let Err(err) = this.start_stream(settings).await {
-                                error!("Failed to start stream, stopping: {err:?}");
+                            let this = this.clone();
+                            spawn(async move {
+                                if let Err(err) = this.start_stream(settings).await {
+                                    error!("Failed to start stream, stopping: {err}");
 
-                                this.stop().await;
-                            }
+                                    this.stop().await;
+                                }
+                            });
                         }
                         Ok(TransportEvent::RecvPacket(packet)) => {
                             let Some(this) = this.upgrade() else {
@@ -612,8 +617,9 @@ impl StreamConnection {
         let mut ipc_sender = self.ipc_sender.clone();
         ipc_sender
             .send(StreamerIpcMessage::WebSocket(
-                StreamServerMessage::StageStarting {
-                    stage: "Moonlight Stream".to_string(),
+                StreamServerMessage::DebugLog {
+                    message: "Moonlight Stream".to_string(),
+                    ty: None,
                 },
             ))
             .await;
@@ -670,7 +676,7 @@ impl StreamConnection {
                     HostError::Moonlight(MoonlightError::ConnectionAlreadyExists) => {
                         ipc_sender
                             .send(StreamerIpcMessage::WebSocket(
-                                StreamServerMessage::AlreadyStreaming,
+                                StreamServerMessage::DebugLog { message: "Failed to start stream because this streamer is already streaming".to_string(), ty: None },
                             ))
                             .await;
                     }
@@ -781,8 +787,9 @@ impl ConnectionListener for StreamConnectionListener {
         stream.runtime.spawn(async move {
             ipc_sender
                 .send(StreamerIpcMessage::WebSocket(
-                    StreamServerMessage::StageStarting {
-                        stage: stage.name().to_string(),
+                    StreamServerMessage::DebugLog {
+                        message: format!("Starting Stage: {}", stage.name()),
+                        ty: None,
                     },
                 ))
                 .await;
@@ -797,8 +804,9 @@ impl ConnectionListener for StreamConnectionListener {
 
         let mut ipc_sender = stream.ipc_sender.clone();
         ipc_sender.blocking_send(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::StageComplete {
-                stage: stage.name().to_string(),
+            StreamServerMessage::DebugLog {
+                message: format!("Completed Stage: {}", stage.name()),
+                ty: None,
             },
         ));
     }
@@ -811,9 +819,13 @@ impl ConnectionListener for StreamConnectionListener {
 
         let mut ipc_sender = stream.ipc_sender.clone();
         ipc_sender.blocking_send(StreamerIpcMessage::WebSocket(
-            StreamServerMessage::StageFailed {
-                stage: stage.name().to_string(),
-                error_code,
+            StreamServerMessage::DebugLog {
+                message: format!(
+                    "Failed Stage: {} with error code {}",
+                    stage.name(),
+                    error_code
+                ),
+                ty: Some(LogMessageType::Fatal),
             },
         ));
     }

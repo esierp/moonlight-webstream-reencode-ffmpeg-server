@@ -7,7 +7,8 @@ use actix_web::{
 use actix_ws::{Closed, Message, Session};
 use common::{
     api_bindings::{
-        PostCancelRequest, PostCancelResponse, StreamClientMessage, StreamServerMessage,
+        LogMessageType, PostCancelRequest, PostCancelResponse, StreamClientMessage,
+        StreamServerMessage,
     },
     ipc::{ServerIpcMessage, StreamerConfig, StreamerIpcMessage, create_child_ipc},
     serialize_json,
@@ -80,15 +81,29 @@ pub async fn start_host(
         let mut host = match user.host(host_id).await {
             Ok(host) => host,
             Err(AppError::HostNotFound) => {
-                let _ = send_ws_message(&mut session, StreamServerMessage::HostNotFound).await;
+                let _ = send_ws_message(
+                    &mut session,
+                    StreamServerMessage::DebugLog {
+                        message: "Failed to start stream because the host was not found"
+                            .to_string(),
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )
+                .await;
                 let _ = session.close(None).await;
                 return;
             }
             Err(err) => {
                 warn!("failed to start stream for host {host_id:?} (at host): {err}");
 
-                let _ =
-                    send_ws_message(&mut session, StreamServerMessage::InternalServerError).await;
+                let _ = send_ws_message(
+                    &mut session,
+                    StreamServerMessage::DebugLog {
+                        message: "Failed to start stream because of a server error".to_string(),
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )
+                .await;
                 let _ = session.close(None).await;
                 return;
             }
@@ -99,8 +114,14 @@ pub async fn start_host(
             Err(err) => {
                 warn!("failed to start stream for host {host_id:?} (at list_apps): {err}");
 
-                let _ =
-                    send_ws_message(&mut session, StreamServerMessage::InternalServerError).await;
+                let _ = send_ws_message(
+                    &mut session,
+                    StreamServerMessage::DebugLog {
+                        message: "Failed to start stream because of a server error".to_string(),
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )
+                .await;
                 let _ = session.close(None).await;
                 return;
             }
@@ -109,7 +130,14 @@ pub async fn start_host(
         let Some(app) = apps.into_iter().find(|app| app.id == app_id) else {
             warn!("failed to start stream for host {host_id:?} because the app couldn't be found!");
 
-            let _ = send_ws_message(&mut session, StreamServerMessage::AppNotFound).await;
+            let _ = send_ws_message(
+                &mut session,
+                StreamServerMessage::DebugLog {
+                    message: "Failed to start stream because the app was not found".to_string(),
+                    ty: Some(LogMessageType::FatalDescription),
+                },
+            )
+            .await;
             let _ = session.close(None).await;
             return;
         };
@@ -119,8 +147,14 @@ pub async fn start_host(
             Err(err) => {
                 warn!("failed to start stream for host {host_id:?} (at get address_port): {err}");
 
-                let _ =
-                    send_ws_message(&mut session, StreamServerMessage::InternalServerError).await;
+                let _ = send_ws_message(
+                    &mut session,
+                    StreamServerMessage::DebugLog {
+                        message: "Failed to start stream because of a server error".to_string(),
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )
+                .await;
                 let _ = session.close(None).await;
                 return;
             }
@@ -131,8 +165,15 @@ pub async fn start_host(
             Err(err) => {
                 warn!("failed to start stream for host {host_id:?} (at get pair_info): {err}");
 
-                let _ =
-                    send_ws_message(&mut session, StreamServerMessage::InternalServerError).await;
+                let _ = send_ws_message(
+                    &mut session,
+                    StreamServerMessage::DebugLog {
+                        message: "Failed to start stream because the host is not paired"
+                            .to_string(),
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )
+                .await;
                 let _ = session.close(None).await;
                 return;
             }
@@ -148,8 +189,9 @@ pub async fn start_host(
         // -- Starting stage: launch streamer
         let _ = send_ws_message(
             &mut session,
-            StreamServerMessage::StageStarting {
-                stage: "Launch Streamer".to_string(),
+            StreamServerMessage::DebugLog {
+                message: "Launching streamer".to_string(),
+                ty: None,
             },
         )
         .await;
@@ -170,8 +212,14 @@ pub async fn start_host(
                 } else {
                     error!("[Stream]: streamer process didn't include a stdin or stdout");
 
-                    let _ = send_ws_message(&mut session, StreamServerMessage::InternalServerError)
-                        .await;
+                    let _ = send_ws_message(
+                        &mut session,
+                        StreamServerMessage::DebugLog {
+                            message: "Failed to start stream because of a server error".to_string(),
+                            ty: Some(LogMessageType::FatalDescription),
+                        },
+                    )
+                    .await;
                     let _ = session.close(None).await;
 
                     if let Err(err) = child.kill().await {
@@ -184,8 +232,14 @@ pub async fn start_host(
             Err(err) => {
                 error!("[Stream]: failed to spawn streamer process: {err}");
 
-                let _ =
-                    send_ws_message(&mut session, StreamServerMessage::InternalServerError).await;
+                let _ = send_ws_message(
+                    &mut session,
+                    StreamServerMessage::DebugLog {
+                        message: "Failed to start stream because of a server error".to_string(),
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )
+                .await;
                 let _ = session.close(None).await;
                 return;
             }

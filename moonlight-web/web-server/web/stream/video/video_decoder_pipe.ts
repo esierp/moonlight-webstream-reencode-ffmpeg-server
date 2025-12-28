@@ -1,7 +1,7 @@
 import { ByteBuffer } from "../buffer.js";
 import { Logger } from "../log.js";
 import { checkExecutionEnvironment } from "../pipeline/worker_pipe.js";
-import { emptyVideoCodecs, maybeVideoCodecs, VIDEO_DECODER_CODECS, VideoCodecSupport } from "../video.js";
+import { andVideoCodecs, emptyVideoCodecs, maybeVideoCodecs, VIDEO_DECODER_CODECS, VideoCodecSupport } from "../video.js";
 import { DataVideoRenderer, FrameVideoRenderer, VideoDecodeUnit, VideoRendererInfo, VideoRendererSetup } from "./index.js";
 
 async function detectCodecs(): Promise<VideoCodecSupport> {
@@ -20,7 +20,19 @@ async function detectCodecs(): Promise<VideoCodecSupport> {
         codecs[codec] = supported.supported ? true : false
     }
 
-    return codecs
+    return andVideoCodecs(codecs, {
+        // TODO: implement av1 stream translator?
+        H264: true,
+        H264_HIGH8_444: true,
+        H265: true,
+        H265_MAIN10: true,
+        H265_REXT8_444: true,
+        H265_REXT10_444: true,
+        AV1_MAIN8: false,
+        AV1_MAIN10: false,
+        AV1_HIGH8_444: false,
+        AV1_HIGH10_444: false
+    })
 }
 async function getIfConfigSupported(config: VideoDecoderConfig): Promise<VideoDecoderConfig | null> {
     const supported = await VideoDecoder.isConfigSupported(config)

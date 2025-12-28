@@ -141,7 +141,7 @@ export async function buildVideoPipeline(type: string, settings: VideoPipelineOp
         supportedCodecs = andVideoCodecs(supportedCodecs, rendererInfo.supportedCodecs)
 
         if (!hasAnyCodec(supportedCodecs)) {
-            logger?.debug(`Not using pipe ${pipeline.pipes.map(pipe => pipe.name).join(" -> ")} -> ${pipeline.renderer.name} (renderer) because it doesn't support any codec`)
+            logger?.debug(`Not using pipe ${pipeline.pipes.map(pipe => pipe.name).join(" -> ")} -> ${pipeline.renderer.name} (renderer) because it doesn't support any codec the user wants`)
             continue pipelineLoop
         }
 

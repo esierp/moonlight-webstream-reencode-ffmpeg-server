@@ -9,7 +9,7 @@ import { defaultStreamInputConfig, MouseMode, ScreenKeyboardSetVisibleEvent, Str
 import { defaultStreamSettings, getLocalStreamSettings, StreamSettings } from "./component/settings_menu.js";
 import { SelectComponent } from "./component/input.js";
 import { allVideoCodecs, emptyVideoCodecs, hasAnyCodec } from "./stream/video.js";
-import { StreamCapabilities, StreamKeys } from "./api_bindings.js";
+import { LogMessageType, StreamCapabilities, StreamKeys } from "./api_bindings.js";
 import { ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
 import { FormModal } from "./component/modal/form.js";
 import { streamStatsToText } from "./stream/stats.js";
@@ -521,6 +521,7 @@ class ConnectionInfoModal implements Modal<void> {
 
     private root = document.createElement("div")
 
+    private textTy: LogMessageType | null = null
     private text = document.createElement("p")
 
     private debugDetailButton = document.createElement("button")
@@ -563,19 +564,7 @@ class ConnectionInfoModal implements Modal<void> {
     onInfo(event: InfoEvent) {
         const data = event.detail
 
-        if (data.type == "stageStarting") {
-            const text = `Server: Starting Stage: ${data.stage}`
-            this.text.innerText = text
-            this.debugLog(text)
-        } else if (data.type == "stageComplete") {
-            const text = `Server: Completed Stage: ${data.stage}`
-            this.text.innerText = text
-            this.debugLog(text)
-        } else if (data.type == "stageFailed") {
-            const text = `Server: Failed Stage: ${data.stage} with error ${data.errorCode}`
-            this.text.innerText = text
-            this.debugLog(text)
-        } else if (data.type == "connectionComplete") {
+        if (data.type == "connectionComplete") {
             const text = `Connection Complete`
             this.text.innerText = text
             this.debugLog(text)
@@ -585,23 +574,25 @@ class ConnectionInfoModal implements Modal<void> {
             const message = data.line.trim()
             if (message) {
                 this.debugLog(message)
+
+                if (!this.textTy) {
+                    this.text.innerText = message
+                    this.textTy = data.additional?.type ?? null
+                } else if (data.additional?.type == "fatalDescription") {
+                    this.text.innerText = message
+                    this.textTy = data.additional.type
+                }
             }
 
-            if (data.additional == "fatal") {
+            if (data.additional?.type == "fatal" || data.additional?.type == "fatalDescription") {
                 showModal(this)
-            } else if (data.additional == "recover") {
+            } else if (data.additional?.type == "recover") {
                 showModal(null)
             }
         } else if (data.type == "serverMessage") {
             const text = `Server: ${data.message}`
             this.text.innerText = text
             this.debugLog(text)
-        } else if (data.type == "connectionTerminated") {
-            const text = `Server: Connection Terminated with code ${data.errorCode}`
-            this.text.innerText = text
-            this.debugLog(text)
-
-            showModal(this)
         }
     }
 

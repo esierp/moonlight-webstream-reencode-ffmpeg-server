@@ -399,7 +399,8 @@ impl WebRtcInner {
                 // TODO: check peer for supported formats via sdp
 
                 // TODO: remove unwrap
-                self.event_sender
+                if let Err(err) = self
+                    .event_sender
                     .send(TransportEvent::StartStream {
                         settings: StreamSettings {
                             bitrate,
@@ -414,7 +415,9 @@ impl WebRtcInner {
                         },
                     })
                     .await
-                    .unwrap();
+                {
+                    error!("Failed to send start stream: {err}");
+                }
             }
             StreamClientMessage::WebRtc(StreamSignalingMessage::Description(description)) => {
                 debug!("[Signaling] Received Remote Description: {:?}", description);

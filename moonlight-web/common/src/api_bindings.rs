@@ -418,6 +418,16 @@ pub struct StreamCapabilities {
 
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export, export_to = EXPORT_PATH)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum LogMessageType {
+    Fatal,
+    FatalDescription,
+    Recover,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = EXPORT_PATH)]
 pub enum StreamServerMessage {
     Setup {
         ice_servers: Vec<RtcIceServer>,
@@ -427,20 +437,9 @@ pub enum StreamServerMessage {
     UpdateApp {
         app: App,
     },
-    InternalServerError,
-    HostNotFound,
-    AppNotFound,
-    HostNotPaired,
-    AlreadyStreaming,
-    StageStarting {
-        stage: String,
-    },
-    StageComplete {
-        stage: String,
-    },
-    StageFailed {
-        stage: String,
-        error_code: i32,
+    DebugLog {
+        message: String,
+        ty: Option<LogMessageType>,
     },
     ConnectionComplete {
         capabilities: StreamCapabilities,

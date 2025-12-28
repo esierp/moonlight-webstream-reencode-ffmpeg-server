@@ -8,12 +8,16 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
+use common::{
+    api_bindings::{LogMessageType, StreamServerMessage},
+    ipc::StreamerIpcMessage,
+};
 use log::{debug, error, info, trace, warn};
 use moonlight_common::stream::{
     bindings::{DecodeResult, FrameType, SupportedVideoFormats, VideoDecodeUnit, VideoFormat},
     video::VideoSetup,
 };
-use tokio::{runtime::Handle, sync::Mutex};
+use tokio::runtime::Handle;
 use webrtc::{
     api::media_engine::{MIME_TYPE_AV1, MIME_TYPE_H264, MIME_TYPE_HEVC, MediaEngine},
     peer_connection::RTCPeerConnection,
@@ -34,13 +38,16 @@ use webrtc::{
     track::track_local::track_local_static_rtp::TrackLocalStaticRTP,
 };
 
-use crate::transport::webrtc::{
-    WebRtcInner,
-    sender::{SequencedTrackLocalStaticRTP, TrackLocalSender},
-    video::{
-        annexb::AnnexBSplitter,
-        h264::{payloader::H264Payloader, reader::H264Reader},
-        h265::{payloader::H265Payloader, reader::H265Reader},
+use crate::transport::{
+    TransportEvent,
+    webrtc::{
+        WebRtcInner,
+        sender::{SequencedTrackLocalStaticRTP, TrackLocalSender},
+        video::{
+            annexb::AnnexBSplitter,
+            h264::{payloader::H264Payloader, reader::H264Reader},
+            h265::{payloader::H265Payloader, reader::H265Reader},
+        },
     },
 };
 
@@ -102,19 +109,32 @@ impl WebRtcVideo {
         info!("[Stream] Stream setup: {width}x{height}x{redraw_rate} and {format:?}");
 
         if !format.contained_in(self.supported_video_formats) {
-            error!(
-                "tried to setup a video stream with a non supported video format: {format:?}, supported formats: {:?}",
+            let message = format!(
+                "The host tried to setup a video stream with a non supported video format: {format:?}, supported formats: {}",
                 self.supported_video_formats
-                    .iter_names()
-                    .collect::<Vec<_>>()
             );
-            // TODO: send error message to client
+
+            error!("{}", message);
+
+            if let Err(err) = inner
+                .event_sender
+                .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
+                    StreamServerMessage::DebugLog {
+                        message,
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )))
+                .await
+            {
+                warn!("Failed to send error to client: {err}");
+            }
+
             return false;
         }
 
         let Some(codec) = video_format_to_codec(format) else {
+            // This shouldn't happen
             error!("Failed to get video codec with format {:?}", format);
-            // TODO: send error message to client
             return false;
         };
 
@@ -147,10 +167,23 @@ impl WebRtcVideo {
             )
             .await
         {
-            error!(
+            let message = format!(
                 "Failed to create video track with format {format:?} and codec \"{codec:?}\": {err:?}"
             );
-            // TODO: send error message to client
+            error!("{}", message);
+
+            if let Err(err) = inner
+                .event_sender
+                .send(TransportEvent::SendIpc(StreamerIpcMessage::WebSocket(
+                    StreamServerMessage::DebugLog {
+                        message,
+                        ty: Some(LogMessageType::FatalDescription),
+                    },
+                )))
+                .await
+            {
+                warn!("Failed to send error to client: {err}");
+            }
             return false;
         }
 
