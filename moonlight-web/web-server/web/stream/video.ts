@@ -16,7 +16,6 @@ export type VideoCodecSupport = {
     AV1_HIGH10_444: VideoCodecSupportFlag
 } & Record<string, VideoCodecSupportFlag>
 
-// TODO: the server should see this info and set the codec based on that and the hinted codec
 export const CAPABILITIES_CODECS: Record<keyof VideoCodecSupport, { mimeType: string, fmtpLine: Array<string> }> = {
     // H264
     "H264": { mimeType: "video/H264", fmtpLine: ["profile-level-id=42e01f"] },

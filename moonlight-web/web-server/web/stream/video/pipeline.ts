@@ -18,7 +18,12 @@ const TestWorkerPipeline1 = workerPipe("TestWorkerPipeline1", { pipes: ["WorkerD
 
 // -- Gather information about the browser
 interface VideoRendererStatic extends PipeInfoStatic, OutputPipeStatic { }
-interface VideoPipeStatic extends PipeInfoStatic, PipeStatic { }
+
+// TODO: print info
+const VIDEO_RENDERERS: Array<VideoRendererStatic> = [
+    VideoElementRenderer,
+    CanvasVideoRenderer,
+]
 
 // -- Build the pipeline
 export type VideoPipelineOptions = {
@@ -52,13 +57,6 @@ export async function buildVideoPipeline(type: "data", settings: VideoPipelineOp
 
 export async function buildVideoPipeline(type: string, settings: VideoPipelineOptions, logger?: Logger): Promise<PipelineResult<VideoRenderer>> {
     const pipesInfo = await gatherPipeInfo()
-    logger?.debug(`Supported Video Renderers / Pipes: {`)
-    let isFirst = true
-    for (const [key, value] of pipesInfo.entries()) {
-        logger?.debug(`${isFirst ? " " : ","}  "${getPipe(key)?.name}": ${JSON.stringify(value)}`)
-        isFirst = false
-    }
-    logger?.debug(`}`)
 
     logger?.debug(`Building video pipeline with output "${type}"`)
 

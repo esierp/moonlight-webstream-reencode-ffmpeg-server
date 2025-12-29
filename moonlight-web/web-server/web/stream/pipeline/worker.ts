@@ -18,6 +18,7 @@ function onLog(text: string, type: LogMessageType | null) {
 
 logger?.addInfoListener(onLog)
 
+let pipelineErrored = false
 let currentPipeline: WorkerReceiver | null = null
 
 class WorkerMessageSender implements WorkerReceiver {
@@ -52,20 +53,22 @@ function onMessage(message: ToWorkerMessage) {
     } else if ("createPipeline" in message) {
         const pipeline = message.createPipeline
 
-        // TODO: create logger
         const newPipeline = buildPipeline(WorkerMessageSender, pipeline, logger)
         if (newPipeline && "onWorkerMessage" in newPipeline && typeof newPipeline.onWorkerMessage == "function") {
             currentPipeline = newPipeline as WorkerReceiver
         } else {
-            // TODO: error
-            throw "failed to create pipeline"
+            logger.debug("Failed to build worker pipeline!", { type: "fatal" })
         }
     } else if ("input" in message) {
+        if (pipelineErrored) {
+            return
+        }
+
         if (currentPipeline) {
             currentPipeline.onWorkerMessage(message.input)
         } else {
-            // TODO: error
-            throw "no pipeline"
+            pipelineErrored = true
+            logger.debug("Failed to submit worker pipe input because pipeline errored!")
         }
     }
 }

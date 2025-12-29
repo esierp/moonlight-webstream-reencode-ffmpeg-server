@@ -56,7 +56,6 @@ function startsWith(buffer: Uint8Array, position: number, check: Uint8Array): bo
     return true
 }
 
-// TODO: this isn't working in firefox
 export class VideoDecoderPipe implements DataVideoRenderer {
     static readonly baseType = "videoframe"
     static readonly type = "videodata"
@@ -416,8 +415,7 @@ class H264StreamVideoTranslator extends CodecStreamTranslator {
 
             return { reconfigure: true }
         } else if (!this.hasDescription) {
-            // TODO: maybe request another idr
-            this.logger?.debug("Received key frame without Sps and Pps")
+            this.logger?.debug("Received key frame without Sps and Pps", { type: "fatal" })
         }
 
         return { reconfigure: false }

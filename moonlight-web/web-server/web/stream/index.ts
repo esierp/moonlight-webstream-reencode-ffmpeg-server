@@ -8,6 +8,7 @@ import { buildAudioPipeline } from "./audio/pipeline.js"
 import { BIG_BUFFER } from "./buffer.js"
 import { defaultStreamInputConfig, StreamInput } from "./input.js"
 import { Logger, LogMessageInfo } from "./log.js"
+import { gatherPipeInfo, getPipe } from "./pipeline/index.js"
 import { StreamStats } from "./stats.js"
 import { Transport, TransportShutdown } from "./transport/index.js"
 import { WebSocketTransport } from "./transport/web_socket.js"
@@ -333,6 +334,17 @@ export class Stream implements Component {
     }
 
     private async createPipelines(): Promise<VideoCodecSupport | null> {
+        // Print supported pipes
+        const pipesInfo = await gatherPipeInfo()
+        this.logger?.debug(`Supported Pipes: {`)
+        let isFirst = true
+        for (const [key, value] of pipesInfo.entries()) {
+            this.logger?.debug(`${isFirst ? "" : ","}"${getPipe(key)?.name}": ${JSON.stringify(value)}`)
+            isFirst = false
+        }
+        this.logger?.debug(`}`)
+
+        // Create pipelines
         const [supportedVideoCodecs] = await Promise.all([this.createVideoRenderer(), this.createAudioPlayer()])
 
         const videoPipeline = `${this.transport?.getChannel(TransportChannelId.HOST_VIDEO).type} (transport) -> ${this.videoRenderer?.implementationName} (renderer)`
