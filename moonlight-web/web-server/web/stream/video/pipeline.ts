@@ -11,7 +11,7 @@ import { andVideoCodecs, hasAnyCodec, VideoCodecSupport } from "../video.js"
 import { buildPipeline, gatherPipeInfo, OutputPipeStatic, PipeInfoStatic, PipeStatic } from "../pipeline/index.js"
 import { DataPipe } from "../pipeline/pipes.js"
 import { workerPipe } from "../pipeline/worker_pipe.js"
-import { WorkerVideoFrameReceivePipe, WorkerVideoTrackReceivePipe, WorkerVideoTrackSendPipe } from "../pipeline/worker_io.js"
+import { WorkerDataSendPipe, WorkerVideoFrameReceivePipe, WorkerVideoTrackReceivePipe, WorkerVideoTrackSendPipe } from "../pipeline/worker_io.js"
 
 // -- Gather information about the browser
 interface VideoRendererStatic extends PipeInfoStatic, OutputPipeStatic { }
@@ -33,6 +33,7 @@ type PipelineResult<T> = { videoRenderer: T, supportedCodecs: VideoCodecSupport,
 type Pipeline = { input: string, pipes: Array<PipeStatic>, renderer: VideoRendererStatic }
 
 export const WorkerVideoMediaStreamProcessorPipe = workerPipe("WorkerVideoMediaStreamProcessorPipe", { pipes: ["WorkerVideoTrackReceivePipe", "VideoMediaStreamTrackProcessorPipe", "WorkerVideoFrameSendPipe"] })
+export const WorkerDataToVideoTrackPipe = workerPipe("WorkerVideoFrameToTrackPipe", { pipes: ["WorkerDataReceivePipe", "DepacketizeVideoPipe", "VideoDecoderPipe", "VideoTrackGeneratorPipe", "WorkerVideoTrackSendPipe"] })
 
 const FORCE_CANVAS_PIPELINES: Array<Pipeline> = [
     // -- track
@@ -42,24 +43,24 @@ const FORCE_CANVAS_PIPELINES: Array<Pipeline> = [
     // TODO: use offscreen canvas when available
     { input: "videotrack", pipes: [WorkerVideoTrackSendPipe, WorkerVideoMediaStreamProcessorPipe, WorkerVideoFrameReceivePipe], renderer: CanvasVideoRenderer },
     // -- data
-    // Convert data -> video frame -> canvas
+    // Convert data -> video frame -> canvas, Default (should be supported everywhere)
     { input: "data", pipes: [DepacketizeVideoPipe, VideoDecoderPipe], renderer: CanvasVideoRenderer },
 ]
 
 const PIPELINES: Array<Pipeline> = [
     // -- track
-    // Convert track -> video element
+    // Convert track -> video element, Default (should be supported everywhere)
     { input: "videotrack", pipes: [], renderer: VideoElementRenderer },
     // Convert track -> video frame -> canvas, Chromium
     { input: "videotrack", pipes: [VideoMediaStreamTrackProcessorPipe], renderer: CanvasVideoRenderer },
     // Convert track -> video frame (in worker) -> canvas, Safari
     { input: "videotrack", pipes: [WorkerVideoTrackSendPipe, WorkerVideoMediaStreamProcessorPipe, WorkerVideoFrameReceivePipe], renderer: CanvasVideoRenderer },
     // -- data
-    // Convert data -> video frame -> track -> video element
+    // Convert data -> video frame (in worker) -> track (in worker, VideoTrackGenerator) -> video element, Safari
+    { input: "data", pipes: [WorkerDataSendPipe, WorkerDataToVideoTrackPipe, WorkerVideoTrackReceivePipe], renderer: VideoElementRenderer },
+    // Convert data -> video frame -> track (MediaStreamTrackGenerator) -> video element, Chromium
     { input: "data", pipes: [DepacketizeVideoPipe, VideoDecoderPipe, VideoMediaStreamTrackGeneratorPipe], renderer: VideoElementRenderer },
-    // Convert data -> video frame -> track -> video element
-    { input: "data", pipes: [DepacketizeVideoPipe, VideoDecoderPipe, VideoTrackGeneratorPipe], renderer: VideoElementRenderer },
-    // Convert data -> video frame -> canvas
+    // Convert data -> video frame -> canvas, Firefox / Fallback
     { input: "data", pipes: [DepacketizeVideoPipe, VideoDecoderPipe], renderer: CanvasVideoRenderer },
 ]
 const TEST_PIPELINES: Array<Pipeline> = [

@@ -6,7 +6,7 @@ import { VideoCodecSupport } from "../video.js";
 import { DepacketizeVideoPipe } from "../video/depackitize_video_pipe.js";
 import { VideoMediaStreamTrackGeneratorPipe } from "../video/media_stream_track_generator_pipe.js";
 import { VideoMediaStreamTrackProcessorPipe } from "../video/media_stream_track_processor_pipe.js";
-import { WorkerVideoMediaStreamProcessorPipe } from "../video/pipeline.js";
+import { WorkerDataToVideoTrackPipe, WorkerVideoMediaStreamProcessorPipe } from "../video/pipeline.js";
 import { VideoDecoderPipe } from "../video/video_decoder_pipe.js";
 import { VideoTrackGeneratorPipe } from "../video/video_track_generator.js";
 import { WorkerDataReceivePipe, WorkerDataSendPipe, WorkerVideoFrameReceivePipe, WorkerVideoFrameSendPipe, WorkerVideoTrackReceivePipe, WorkerVideoTrackSendPipe } from "./worker_io.js";
@@ -146,6 +146,7 @@ export function pipes(): Array<PipeStatic> {
         VideoTrackGeneratorPipe,
         // Video Worker pipes
         WorkerVideoMediaStreamProcessorPipe,
+        WorkerDataToVideoTrackPipe,
         // Audio
         DepacketizeAudioPipe,
         AudioMediaStreamTrackGeneratorPipe,
