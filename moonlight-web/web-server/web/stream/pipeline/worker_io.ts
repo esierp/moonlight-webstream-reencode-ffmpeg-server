@@ -1,6 +1,6 @@
 import { Logger } from "../log.js";
 import { FrameVideoRenderer, TrackVideoRenderer, VideoRendererSetup } from "../video/index.js";
-import { Pipe, PipeInfo } from "./index.js";
+import { globalObject, Pipe, PipeInfo } from "./index.js";
 import { addPipePassthrough, DataPipe } from "./pipes.js";
 import { WorkerPipe, WorkerReceiver } from "./worker_pipe.js";
 import { WorkerMessage } from "./worker_types.js";
@@ -74,10 +74,12 @@ class WorkerSenderPipe implements DataPipe, FrameVideoRenderer, TrackVideoRender
 
     readonly implementationName: string
 
+    protected logger: Logger | null = null
     private base: WorkerPipe
 
-    constructor(base: WorkerPipe, _logger?: Logger) {
+    constructor(base: WorkerPipe, logger?: Logger) {
         this.implementationName = `worker_send -> ${base.implementationName}`
+        this.logger = logger ?? null
         this.base = base
 
         addPipePassthrough(this)
@@ -111,4 +113,55 @@ export class WorkerDataSendPipe extends WorkerSenderPipe {
 }
 export class WorkerVideoTrackSendPipe extends WorkerSenderPipe {
     static readonly type = "videotrack"
+}
+
+
+export class WorkerOffscreenCanvasSendPipe extends WorkerSenderPipe implements FrameVideoRenderer {
+
+    static async getInfo(): Promise<PipeInfo> {
+        return {
+            environmentSupported: "OffscreenCanvasRenderingContext2D" in globalObject()
+        }
+    }
+
+    static readonly baseType = "workerinput"
+    static readonly type = "videoframe"
+
+    implementationName: string = "offscreen_canvas_send"
+
+    private canvas: OffscreenCanvas | null = null
+    private context: OffscreenCanvasRenderingContext2D | null = null
+
+    constructor(base: WorkerPipe, logger?: Logger) {
+        super(base, logger)
+
+        addPipePassthrough(this)
+    }
+
+    setContext(canvas: OffscreenCanvas) {
+        // This is called from the WorkerPipe
+        this.canvas = canvas
+        this.context = canvas.getContext("2d")
+
+        if (!this.context) {
+            this.logger?.debug("Failed to get OffscreenCanvasContext2D", { type: "fatal" })
+        }
+    }
+
+    override submitFrame(frame: VideoFrame): void {
+        if (this.canvas && this.context) {
+            this.canvas.width = frame.displayWidth
+            this.canvas.height = frame.displayHeight
+
+            this.context.clearRect(0, 0, frame.displayWidth, frame.displayHeight)
+            this.context.drawImage(frame, 0, 0, frame.displayWidth, frame.displayHeight)
+
+            if ("commit" in this.canvas && typeof this.canvas.commit == "function") {
+                // Signal finished, not supported in all browsers
+                this.canvas.commit()
+            }
+        }
+
+        frame.close()
+    }
 }

@@ -1,6 +1,7 @@
 import { showErrorPopup } from "../../component/error.js";
 import { Logger } from "../log.js";
 import { VideoRendererSetup } from "../video/index.js";
+import { OffscreenCanvasVideoRenderer } from "../video/offscreen_canvas.js";
 import { globalObject, Pipe, PipeInfo, Pipeline, pipelineToString, PipeStatic } from "./index.js";
 import { addPipePassthrough } from "./pipes.js";
 import { ToMainMessage, ToWorkerMessage, WorkerMessage } from "./worker_types.js";
@@ -95,6 +96,26 @@ export class WorkerPipe implements WorkerReceiver {
         } else if ("log" in data) {
             this.logger?.debug(data.log, data.info)
         }
+    }
+
+    mount() {
+        let result
+        if ("mount" in this.base && typeof this.base.mount == "function") {
+            result = this.base.mount(...arguments)
+        }
+
+        // The OffscreenCanvas needs to transfer it's canvas into the worker, do that here
+        if (this.base instanceof OffscreenCanvasVideoRenderer && this.base.offscreen) {
+            this.logger?.debug("TESTING: TRANSFERRED")
+
+            const canvas = this.base.offscreen
+            this.onWorkerMessage({ canvas }, [canvas])
+
+            this.base.transferred = true
+            this.base.offscreen = null
+        }
+
+        return result
     }
 
     cleanup() {
