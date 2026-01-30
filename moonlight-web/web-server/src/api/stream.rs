@@ -1,4 +1,7 @@
-use std::process::Stdio;
+use std::{
+    path::PathBuf,
+    process::Stdio,
+};
 
 use actix_web::{
     Error, HttpRequest, HttpResponse, get, post, rt as actix_rt,
@@ -10,11 +13,18 @@ use common::{
         LogMessageType, PostCancelRequest, PostCancelResponse, StreamClientMessage,
         StreamServerMessage,
     },
+    config::StorageConfig,
     ipc::{ServerIpcMessage, StreamerConfig, StreamerIpcMessage, create_child_ipc},
     serialize_json,
 };
 use log::{debug, error, info, warn};
-use tokio::{process::Command, spawn};
+use serde::Deserialize;
+use tokio::{
+    fs::OpenOptions,
+    io::AsyncWriteExt,
+    process::Command,
+    spawn,
+};
 
 use crate::app::{
     App, AppError,
@@ -297,6 +307,7 @@ pub async fn start_host(
             .send(ServerIpcMessage::Init {
                 config: StreamerConfig {
                     webrtc: web_app.config().webrtc.clone(),
+                    video: web_app.config().video.clone(),
                     log_level: web_app.config().log.level_filter,
                 },
                 host_address: address,
@@ -355,4 +366,38 @@ pub async fn cancel_host(
     host.cancel_app(&mut user).await?;
 
     Ok(Json(PostCancelResponse { success: true }))
+}
+
+#[derive(Deserialize)]
+pub struct ClientLogRequest {
+    lines: Vec<String>,
+}
+
+#[post("/client-log")]
+pub async fn client_log(
+    app: Data<App>,
+    _user: AuthenticatedUser,
+    Json(request): Json<ClientLogRequest>,
+) -> Result<HttpResponse, AppError> {
+    let base_path = match app.config().data_storage.clone() {
+        StorageConfig::Json { path, .. } => PathBuf::from(path),
+    };
+
+    let log_path = base_path
+        .parent()
+        .map(|dir| dir.join("client-logs.txt"))
+        .unwrap_or_else(|| PathBuf::from("server/client-logs.txt"));
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .await?;
+
+    for line in request.lines {
+        file.write_all(line.as_bytes()).await?;
+        file.write_all(b"\n").await?;
+    }
+
+    Ok(HttpResponse::Ok().finish())
 }
