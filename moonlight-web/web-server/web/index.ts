@@ -35,6 +35,9 @@ async function startApp() {
 
     const app = new MainApp(api)
     app.mount(rootElement)
+    ;import("./footer.js").then((mod: any) => {
+        mod?.addFooter?.()
+    });
 
     window.addEventListener("popstate", event => {
         app.setAppState(event.state, false)

@@ -79,6 +79,7 @@ function getVideoCodecHint(settings: Settings): VideoCodecSupport {
 
 export class Stream implements Component {
     private logger: Logger = new Logger()
+    private restartInProgress = false
 
     private api: Api
 
@@ -90,7 +91,8 @@ export class Stream implements Component {
     private divElement = document.createElement("div")
     private eventTarget = new EventTarget()
 
-    private ws: WebSocket
+    private ws!: WebSocket
+    private wsApiHost: string
     private iceServers: Array<RTCIceServer> | null = null
 
     private videoRenderer: VideoRenderer | null = null
@@ -100,6 +102,7 @@ export class Stream implements Component {
     private stats: StreamStats
 
     private streamerSize: [number, number]
+    private lastVideoCodecSupport: VideoCodecSupport | null = null
 
     constructor(api: Api, hostId: number, appId: number, settings: Settings, viewerScreenSize: [number, number]) {
         this.logger.addInfoListener((info, type) => {
@@ -116,22 +119,11 @@ export class Stream implements Component {
         this.streamerSize = getStreamerSize(settings, viewerScreenSize)
 
         // Configure web socket
-        const wsApiHost = api.host_url.replace(/^http(s)?:/, "ws$1:")
+        this.wsApiHost = api.host_url.replace(/^http(s)?:/, "ws$1:")
         // TODO: firstly try out WebTransport
-        this.ws = new WebSocket(`${wsApiHost}/host/stream`)
-        this.ws.addEventListener("error", this.onError.bind(this))
-        this.ws.addEventListener("open", this.onWsOpen.bind(this))
-        this.ws.addEventListener("close", this.onWsClose.bind(this))
-        this.ws.addEventListener("message", this.onRawWsMessage.bind(this))
+        this.createWebSocket()
 
-        this.sendWsMessage({
-            Init: {
-                host_id: this.hostId,
-                app_id: this.appId,
-                video_frame_queue_size: this.settings.videoFrameQueueSize,
-                audio_sample_queue_size: this.settings.audioSampleQueueSize,
-            }
-        })
+        this.sendInitMessage()
 
         // Stream Input
         const streamInputConfig = defaultStreamInputConfig()
@@ -155,6 +147,56 @@ export class Stream implements Component {
         }
     }
 
+    private createWebSocket() {
+        this.ws = new WebSocket(`${this.wsApiHost}/host/stream`)
+        this.ws.addEventListener("error", this.onError.bind(this))
+        this.ws.addEventListener("open", this.onWsOpen.bind(this))
+        this.ws.addEventListener("close", this.onWsClose.bind(this))
+        this.ws.addEventListener("message", this.onRawWsMessage.bind(this))
+    }
+
+    private sendInitMessage() {
+        this.sendWsMessage({
+            Init: {
+                host_id: this.hostId,
+                app_id: this.appId,
+                video_frame_queue_size: this.settings.videoFrameQueueSize,
+                audio_sample_queue_size: this.settings.audioSampleQueueSize,
+            }
+        })
+    }
+
+    private async ensureWebSocket(forceReconnect = false): Promise<void> {
+        if (forceReconnect) {
+            try {
+                this.ws.close()
+            } catch {
+                // ignore
+            }
+            this.wsSendBuffer = []
+            this.createWebSocket()
+        }
+
+        if (this.ws.readyState === WebSocket.OPEN) {
+            return
+        }
+
+        if (this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+            this.createWebSocket()
+        }
+
+        await new Promise<void>((resolve) => {
+            if (this.ws.readyState === WebSocket.OPEN) {
+                resolve()
+                return
+            }
+
+            this.ws.addEventListener("open", () => resolve(), { once: true })
+        })
+
+        this.sendInitMessage()
+    }
+
     private async onMessage(message: StreamServerMessage) {
         if ("DebugLog" in message) {
             const debugLog = message.DebugLog
@@ -168,6 +210,14 @@ export class Stream implements Component {
             })
 
             this.eventTarget.dispatchEvent(event)
+        } else if ("TranscodeStatus" in message) {
+            const status = message.TranscodeStatus
+            this.stats.setTranscodeInfo(
+                status.enabled,
+                status.codec ?? null,
+                status.bitrate_kbps ?? null,
+            )
+            this.debugLog(`Server Transcode: ${status.enabled ? "ON" : "OFF"}`)
         } else if ("ConnectionComplete" in message) {
             const capabilities = message.ConnectionComplete.capabilities
             const formatRaw = message.ConnectionComplete.format
@@ -386,7 +436,7 @@ export class Stream implements Component {
         return true
     }
 
-    private async tryWebRTCTransport(): Promise<TransportShutdown> {
+    private async tryWebRTCTransport(waitForClose = true, respondOnly = false): Promise<TransportShutdown | "failednoconnect" | void> {
         this.debugLog("Trying WebRTC transport")
 
         this.sendWsMessage({
@@ -400,6 +450,7 @@ export class Stream implements Component {
 
         const transport = new WebRTCTransport(this.logger)
         transport.onsendmessage = (message) => this.sendWsMessage({ WebRtc: message })
+        transport.setRespondOnly(respondOnly)
 
         transport.initPeer({
             iceServers: this.iceServers
@@ -435,16 +486,21 @@ export class Stream implements Component {
             await transport.close()
             return "failednoconnect"
         }
+        this.lastVideoCodecSupport = videoCodecSupport
 
         await this.startStream(videoCodecSupport)
 
-        return new Promise((resolve, reject) => {
+        if (!waitForClose) {
+            return
+        }
+
+        return new Promise((resolve, _reject) => {
             transport.onclose = (shutdown) => {
                 resolve(shutdown)
             }
         })
     }
-    private async tryWebSocketTransport() {
+    private async tryWebSocketTransport(waitForClose = true): Promise<TransportShutdown | void> {
         this.debugLog("Trying Web Socket transport")
 
         this.sendWsMessage({
@@ -460,10 +516,15 @@ export class Stream implements Component {
             this.debugLog("Failed to start stream because no video pipeline with support for the specified codec was found!", { type: "fatal" })
             return
         }
+        this.lastVideoCodecSupport = videoCodecSupport
 
         await this.startStream(videoCodecSupport)
 
-        return new Promise((resolve, reject) => {
+        if (!waitForClose) {
+            return
+        }
+
+        return new Promise((resolve, _reject) => {
             transport.onclose = (shutdown) => {
                 resolve(shutdown)
             }
@@ -648,6 +709,13 @@ export class Stream implements Component {
                 video_colorspace: "Rec709",
                 video_color_range_full: false,
                 hdr: this.settings.hdr ?? false,
+                reencode: {
+                    enabled: this.settings.serverReencodeEnabled,
+                    codec: this.settings.serverReencodeCodec,
+                    bitrate_kbps: this.settings.serverReencodeBitrateKbps,
+                    preset: this.settings.serverReencodePreset === "default" ? null : this.settings.serverReencodePreset,
+                    threads: this.settings.serverReencodeThreads > 0 ? this.settings.serverReencodeThreads : null,
+                }
             }
         }
         this.debugLog(`Starting stream with info: ${JSON.stringify(message)}`)
@@ -678,6 +746,104 @@ export class Stream implements Component {
     }
     getAudioPlayer(): AudioPlayer | null {
         return this.audioPlayer
+    }
+
+    getSettings(): Settings {
+        return this.settings
+    }
+
+    async updateBitrateKbps(bitrateKbps: number): Promise<void> {
+        this.settings.serverReencodeEnabled = true
+        this.settings.serverReencodeBitrateKbps = bitrateKbps
+        this.debugLog(`Updating webclient bitrate to ${bitrateKbps} kbps (server re-encode)`) 
+
+        this.sendWsMessage({
+            UpdateReencode: {
+                reencode: {
+                    enabled: true,
+                    codec: this.settings.serverReencodeCodec,
+                    bitrate_kbps: this.settings.serverReencodeBitrateKbps,
+                    preset: this.settings.serverReencodePreset === "default" ? null : this.settings.serverReencodePreset,
+                    threads: this.settings.serverReencodeThreads > 0 ? this.settings.serverReencodeThreads : null,
+                }
+            }
+        })
+    }
+
+    private async restartStream(): Promise<void> {
+        if (!this.ws) {
+            this.debugLog("Cannot restart stream: no websocket")
+            return
+        }
+
+        if (this.restartInProgress) {
+            this.debugLog("Restart already in progress")
+            return
+        }
+
+        this.restartInProgress = true
+        this.debugLog("Restarting stream with new settings...")
+
+        try {
+            if (this.transport) {
+                const stopSent = await this.stop()
+                if (!stopSent) {
+                    this.debugLog("Failed to send stop before restart", { type: "informError" })
+                }
+            }
+
+            if (this.transport instanceof WebRTCTransport) {
+                this.transport.onsendmessage = null
+            }
+
+            await this.transport?.close()
+        } catch {
+            // ignore
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        try {
+            this.transport = null
+            this.videoRenderer?.unmount(this.divElement)
+            this.videoRenderer?.cleanup()
+            this.videoRenderer = null
+            this.audioPlayer?.unmount(this.divElement)
+            this.audioPlayer?.cleanup()
+            this.audioPlayer = null
+
+            let transportResult: TransportShutdown | void = undefined
+            let attempts = 0
+            while (attempts < 2) {
+                await this.ensureWebSocket(true)
+                await new Promise((resolve) => setTimeout(resolve, 300))
+
+                if (this.settings.dataTransport === "auto") {
+                    transportResult = await this.tryWebRTCTransport(false, true)
+                    if (transportResult === "failednoconnect") {
+                        this.debugLog("Failed to establish WebRTC connection. Falling back to Web Socket transport.")
+                        transportResult = await this.tryWebSocketTransport(false)
+                    }
+                } else if (this.settings.dataTransport === "webrtc") {
+                    transportResult = await this.tryWebRTCTransport(false, true)
+                } else {
+                    transportResult = await this.tryWebSocketTransport(false)
+                }
+
+                if (transportResult !== "failednoconnect") {
+                    break
+                }
+
+                attempts += 1
+                this.debugLog("Restart attempt failed, retrying signaling...", { type: "informError" })
+            }
+
+            if (transportResult === "failednoconnect") {
+                this.debugLog("Failed to restart stream with updated bitrate", { type: "informError" })
+            }
+        } finally {
+            this.restartInProgress = false
+        }
     }
 
     // -- Raw Web Socket stuff

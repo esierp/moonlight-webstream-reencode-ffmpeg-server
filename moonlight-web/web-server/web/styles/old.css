@@ -689,8 +689,25 @@ canvas.video-stream {
 
     color: yellow;
 
-    position: relative;
+    position: absolute;
+    top: 8px;
+    left: 8px;
     z-index: 1;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    overflow: auto;
+}
+
+.video-stats-text {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: clamp(10px, 2.2vw, 14px);
+}
+
+.video-stats-graph {
+    margin-top: 6px;
+    border: 1px solid rgba(255, 255, 0, 0.4);
+    border-radius: 6px;
 }
 
 .sidebar-stream {
@@ -768,4 +785,17 @@ canvas.video-stream {
 
 .user-info-delete {
     background-color: red;
+}
+.build-footer {
+    position: fixed;
+    bottom: 8px;
+    right: 12px;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 4px 8px;
+    border-radius: 6px;
+    z-index: 5000;
+    pointer-events: none;
 }
