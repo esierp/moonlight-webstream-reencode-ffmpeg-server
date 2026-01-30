@@ -104,6 +104,9 @@ jobs:
           file: ./docker/Dockerfile.action
           tags: esierp/moonlight-web-stream-reencode-poc:${{ github.ref_name }}-${{ matrix.platform }}
           push: true
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.run_started_at }}
 
   docker-manifest:
     name: Docker create multi-arch manifest for versioned images

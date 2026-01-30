@@ -17,6 +17,12 @@ COPY moonlight-web/ ${MOONLIGHT_WEB_PATH}/
 # Mark executables as executable
 RUN chmod +x ${MOONLIGHT_WEB_PATH}/streamer ${MOONLIGHT_WEB_PATH}/web-server
 
+# Write build info for footer
+ARG BUILD_COMMIT=dev
+ARG BUILD_TIME=dev
+RUN printf "export const BUILD_COMMIT = \"%s\"\nexport const BUILD_TIME = \"%s\"\n" "$BUILD_COMMIT" "$BUILD_TIME" \
+  > ${MOONLIGHT_WEB_PATH}/static/build_info.js
+
 # Create a volume with the config.json and data.json
 VOLUME ${MOONLIGHT_WEB_PATH}/server
 
