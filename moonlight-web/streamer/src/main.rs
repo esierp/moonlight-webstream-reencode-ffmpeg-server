@@ -23,6 +23,7 @@ use common::{
     },
 };
 use log::{LevelFilter, debug, error, info, trace, warn};
+use crate::ffmpeg::{FfmpegPipeline, FfmpegPipelineConfig};
 use moonlight_common::{
     MoonlightError,
     high::{HostError, MoonlightHost, StreamConfigError},
@@ -67,6 +68,7 @@ pub const TIMEOUT_DURATION: Duration = Duration::from_secs(10);
 mod audio;
 mod buffer;
 mod convert;
+mod ffmpeg;
 mod transport;
 mod video;
 
@@ -225,6 +227,7 @@ struct StreamConnection {
     pub stream: RwLock<Option<MoonlightStream>>,
     pub active_gamepads: RwLock<ActiveGamepads>,
     pub transport_sender: Mutex<Option<Box<dyn TransportSender + Send + Sync + 'static>>>,
+    pub reencode_settings: Mutex<Option<common::api_bindings::ReencodeSettings>>,
     // Timeout / Terminate
     pub timeout_terminate_request: Mutex<Option<Instant>>,
     pub terminate: Notify,
@@ -256,6 +259,7 @@ impl StreamConnection {
             stream: RwLock::new(None),
             active_gamepads: RwLock::new(ActiveGamepads::empty()),
             transport_sender: Mutex::new(None),
+            reencode_settings: Mutex::new(None),
             timeout_terminate_request: Default::default(),
             terminate: Notify::default(),
             is_terminating: AtomicBool::new(false),
@@ -578,42 +582,76 @@ impl StreamConnection {
     }
 
     async fn on_ipc_message(self: &Arc<StreamConnection>, message: ServerIpcMessage) {
-        if let ServerIpcMessage::WebSocket(StreamClientMessage::SetTransport(transport_type)) =
-            &message
-        {
-            self.clear_terminate_request().await;
+        if let ServerIpcMessage::WebSocket(message) = &message {
+            match message {
+                StreamClientMessage::SetTransport(transport_type) => {
+                    self.clear_terminate_request().await;
 
-            match transport_type {
-                TransportType::WebRTC => {
-                    info!("Trying WebRTC transport");
+                    match transport_type {
+                        TransportType::WebRTC => {
+                            info!("Trying WebRTC transport");
 
-                    let (sender, events) = match webrtc::new(
-                        &self.config.webrtc,
-                        self.video_frame_queue_size,
-                        self.audio_sample_queue_size,
-                    )
-                    .await
-                    {
-                        Ok(value) => value,
-                        Err(err) => {
-                            error!("Failed to start webrtc transport: {err}");
-                            return;
+                            let (sender, events) = match webrtc::new(
+                                &self.config.webrtc,
+                                self.video_frame_queue_size,
+                                self.audio_sample_queue_size,
+                            )
+                            .await
+                            {
+                                Ok(value) => value,
+                                Err(err) => {
+                                    error!("Failed to start webrtc transport: {err}");
+                                    return;
+                                }
+                            };
+                            self.set_transport(Box::new(sender), Box::new(events)).await;
                         }
-                    };
-                    self.set_transport(Box::new(sender), Box::new(events)).await;
-                }
-                TransportType::WebSocket => {
-                    info!("Trying Web Socket transport");
+                        TransportType::WebSocket => {
+                            info!("Trying Web Socket transport");
 
-                    let (sender, events) = match web_socket::new().await {
-                        Ok(value) => value,
-                        Err(err) => {
-                            error!("Failed to start web socket transport: {err}");
-                            return;
+                            let (sender, events) = match web_socket::new().await {
+                                Ok(value) => value,
+                                Err(err) => {
+                                    error!("Failed to start web socket transport: {err}");
+                                    return;
+                                }
+                            };
+                            self.set_transport(Box::new(sender), Box::new(events)).await;
                         }
-                    };
-                    self.set_transport(Box::new(sender), Box::new(events)).await;
+                    }
                 }
+                StreamClientMessage::UpdateReencode { reencode } => {
+                    let mut reencode_settings = self.reencode_settings.lock().await;
+                    *reencode_settings = reencode.clone();
+
+                    let mut ipc_sender = self.ipc_sender.clone();
+                    let _ = ipc_sender
+                        .send(StreamerIpcMessage::WebSocket(StreamServerMessage::TranscodeStatus {
+                            enabled: reencode.as_ref().map(|r| r.enabled).unwrap_or(false),
+                            codec: reencode.as_ref().map(|r| r.codec.clone()),
+                            bitrate_kbps: reencode.as_ref().map(|r| r.bitrate_kbps),
+                        }))
+                        .await;
+
+                    let message = match reencode.as_ref() {
+                        Some(reencode) => format!(
+                            "UpdateReencode: enabled={} codec={:?} bitrate_kbps={} preset={:?} threads={:?}",
+                            reencode.enabled,
+                            reencode.codec,
+                            reencode.bitrate_kbps,
+                            reencode.preset,
+                            reencode.threads
+                        ),
+                        None => "UpdateReencode: disabled".to_string(),
+                    };
+                    let _ = ipc_sender
+                        .send(StreamerIpcMessage::WebSocket(StreamServerMessage::DebugLog {
+                            message,
+                            ty: None,
+                        }))
+                        .await;
+                }
+                _ => {}
             }
         }
 
@@ -640,6 +678,26 @@ impl StreamConnection {
         }
         info!("Starting Moonlight stream with settings: {settings}");
 
+        // Inform UI about server-side transcode status
+        let mut ipc_sender = self.ipc_sender.clone();
+        if let Some(reencode) = settings.reencode.as_ref() {
+            let _ = ipc_sender
+                .send(StreamerIpcMessage::WebSocket(StreamServerMessage::TranscodeStatus {
+                    enabled: reencode.enabled,
+                    codec: Some(reencode.codec.clone()),
+                    bitrate_kbps: Some(reencode.bitrate_kbps),
+                }))
+                .await;
+        } else {
+            let _ = ipc_sender
+                .send(StreamerIpcMessage::WebSocket(StreamServerMessage::TranscodeStatus {
+                    enabled: false,
+                    codec: None,
+                    bitrate_kbps: None,
+                }))
+                .await;
+        }
+
         // Send stage
         let mut ipc_sender = self.ipc_sender.clone();
         ipc_sender
@@ -653,10 +711,43 @@ impl StreamConnection {
 
         let mut host = self.info.host.lock().await;
 
+        {
+            let mut reencode = self.reencode_settings.lock().await;
+            *reencode = settings.reencode.clone();
+        }
+
+        let ffmpeg_pipeline = if let Some(reencode) = settings.reencode.as_ref() {
+            if reencode.enabled {
+                let encoder = match reencode.codec {
+                    common::api_bindings::ReencodeCodec::H264 => "libx264",
+                    common::api_bindings::ReencodeCodec::VP8 => "libvpx",
+                };
+                Some(FfmpegPipeline::new(FfmpegPipelineConfig {
+                    encoder: encoder.to_string(),
+                    preset: reencode
+                        .preset
+                        .clone()
+                        .unwrap_or_else(|| self.config.video.ffmpeg.preset.clone()),
+                    bitrate_kbps: reencode.bitrate_kbps,
+                    fps: settings.fps,
+                    threads: reencode.threads,
+                }))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let video_decoder = StreamVideoDecoder {
             stream: Arc::downgrade(self),
             supported_formats: settings.video_supported_formats,
             stats: Default::default(),
+            ffmpeg: ffmpeg_pipeline,
+            cached_sps: None,
+            cached_pps: None,
+            needs_headers: true,
+            waiting_for_idr: false,
         };
 
         let audio_decoder = StreamAudioDecoder {

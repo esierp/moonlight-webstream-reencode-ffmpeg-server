@@ -8,6 +8,8 @@ license.workspace = true
 moonlight-common = { workspace = true, features = ["high", "stream"] }
 common = { path = "../common" }
 
+ffmpeg-next = { workspace = true }
+
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 webrtc = { workspace = true }
 bytes = { workspace = true }
