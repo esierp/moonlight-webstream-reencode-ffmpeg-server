@@ -5,6 +5,12 @@ ENV MOONLIGHT_WEB_PATH=/moonlight-web
 # Create / Go to app directory
 WORKDIR ${MOONLIGHT_WEB_PATH}
 
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+  libavutil58 libavcodec60 libavformat60 libswscale7 \
+  libavdevice60 libavfilter9 libswresample4 \
+  && rm -rf /var/lib/apt/lists/*
+
 # Copy prebuilt artifacts
 COPY moonlight-web/ ${MOONLIGHT_WEB_PATH}/
 
