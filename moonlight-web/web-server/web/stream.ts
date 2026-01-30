@@ -89,6 +89,9 @@ class ViewerApp implements Component {
 
     private settings: Settings
 
+    private adaptiveIntervalId: number | null = null
+    private adaptiveLastUpdateMs = 0
+
     private inputConfig: StreamInputConfig = defaultStreamInputConfig()
     private previousMouseMode: MouseMode
     private toggleFullscreenWithKeybind: boolean
@@ -215,6 +218,7 @@ class ViewerApp implements Component {
         this.startStream(hostId, appId, settings, [browserWidth, browserHeight])
 
         this.settings = settings
+        this.startAdaptiveBitrate()
 
         // Configure input
         this.addListeners(document)
@@ -686,6 +690,54 @@ class ViewerApp implements Component {
     }
     getStream(): Stream | null {
         return this.stream
+    }
+
+    private startAdaptiveBitrate() {
+        if (!this.settings.adaptiveBitrateEnabled) {
+            return
+        }
+
+        this.stream?.getStats().setEnabled(true)
+
+        if (this.adaptiveIntervalId != null) {
+            return
+        }
+
+        this.adaptiveIntervalId = setInterval(() => {
+            const stream = this.stream
+            if (!stream) {
+                return
+            }
+
+            const stats = stream.getStats().getCurrentStats()
+            const observedKbps = stats.outgoingKbps ?? stats.incomingKbps
+            if (!observedKbps || observedKbps <= 0) {
+                return
+            }
+
+            const minKbps = Math.max(500, this.settings.adaptiveBitrateMinKbps)
+            const maxKbps = Math.max(minKbps, this.settings.adaptiveBitrateMaxKbps)
+            const currentTarget = this.settings.serverReencodeBitrateKbps
+            let nextTarget = currentTarget
+
+            if (observedKbps < currentTarget * 0.8) {
+                nextTarget = Math.max(minKbps, Math.floor(observedKbps * 0.9))
+            } else if (observedKbps > currentTarget * 1.1 && currentTarget < maxKbps) {
+                nextTarget = Math.min(maxKbps, Math.floor(currentTarget * 1.05 + 250))
+            }
+
+            if (Math.abs(nextTarget - currentTarget) < 250) {
+                return
+            }
+
+            const now = Date.now()
+            if (now - this.adaptiveLastUpdateMs < 3000) {
+                return
+            }
+
+            this.adaptiveLastUpdateMs = now
+            this.updateBitrateKbps(nextTarget)
+        }, 2000)
     }
 
     async updateBitrateKbps(bitrateKbps: number) {

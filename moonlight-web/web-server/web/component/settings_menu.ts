@@ -22,6 +22,9 @@ export type Settings = {
     serverReencodeBitrateKbps: number
     serverReencodePreset: string
     serverReencodeThreads: number
+    adaptiveBitrateEnabled: boolean
+    adaptiveBitrateMinKbps: number
+    adaptiveBitrateMaxKbps: number
     forceVideoElementRenderer: boolean
     canvasRenderer: boolean
     canvasVsync: boolean
@@ -91,6 +94,9 @@ export class StreamSettingsComponent implements Component {
     private serverReencodeBitrateKbps: InputComponent
     private serverReencodePreset: SelectComponent
     private serverReencodeThreads: InputComponent
+    private adaptiveBitrateEnabled: InputComponent
+    private adaptiveBitrateMinKbps: InputComponent
+    private adaptiveBitrateMaxKbps: InputComponent
     private forceVideoElementRenderer: InputComponent
     private canvasRenderer: InputComponent
     private canvasVsync: InputComponent
@@ -239,6 +245,36 @@ export class StreamSettingsComponent implements Component {
         })
         this.serverReencodeThreads.addChangeListener(this.onSettingsChange.bind(this))
         this.serverReencodeThreads.mount(this.divElement)
+
+        this.adaptiveBitrateEnabled = new InputComponent("adaptiveBitrateEnabled", "checkbox", "Adaptive Re-Encode Bitrate", {
+            checked: settings?.adaptiveBitrateEnabled ?? defaultSettings_.adaptiveBitrateEnabled,
+        })
+        this.adaptiveBitrateEnabled.addChangeListener(this.onSettingsChange.bind(this))
+        this.adaptiveBitrateEnabled.mount(this.divElement)
+
+        this.adaptiveBitrateMinKbps = new InputComponent("adaptiveBitrateMinKbps", "number", "Adaptive Bitrate Min (kbps)", {
+            defaultValue: defaultSettings_.adaptiveBitrateMinKbps.toString(),
+            value: settings?.adaptiveBitrateMinKbps?.toString(),
+            step: "500",
+            numberSlider: {
+                range_min: 500,
+                range_max: 50000,
+            }
+        })
+        this.adaptiveBitrateMinKbps.addChangeListener(this.onSettingsChange.bind(this))
+        this.adaptiveBitrateMinKbps.mount(this.divElement)
+
+        this.adaptiveBitrateMaxKbps = new InputComponent("adaptiveBitrateMaxKbps", "number", "Adaptive Bitrate Max (kbps)", {
+            defaultValue: defaultSettings_.adaptiveBitrateMaxKbps.toString(),
+            value: settings?.adaptiveBitrateMaxKbps?.toString(),
+            step: "500",
+            numberSlider: {
+                range_min: 1000,
+                range_max: 100000,
+            }
+        })
+        this.adaptiveBitrateMaxKbps.addChangeListener(this.onSettingsChange.bind(this))
+        this.adaptiveBitrateMaxKbps.mount(this.divElement)
 
         // Video Size
         this.videoSize = new SelectComponent("videoSize",
@@ -445,6 +481,10 @@ export class StreamSettingsComponent implements Component {
             this.videoSizeHeight.setEnabled(false)
         }
 
+        const adaptiveEnabled = this.adaptiveBitrateEnabled.isChecked()
+        this.adaptiveBitrateMinKbps.setEnabled(adaptiveEnabled)
+        this.adaptiveBitrateMaxKbps.setEnabled(adaptiveEnabled)
+
         this.divElement.dispatchEvent(new ComponentEvent("ml-settingschange", this))
     }
 
@@ -501,6 +541,10 @@ export class StreamSettingsComponent implements Component {
         settings.serverReencodeBitrateKbps = parseInt(this.serverReencodeBitrateKbps.getValue())
         settings.serverReencodePreset = this.serverReencodePreset.getValue() ?? defaultSettings().serverReencodePreset
         settings.serverReencodeThreads = parseInt(this.serverReencodeThreads.getValue())
+
+        settings.adaptiveBitrateEnabled = this.adaptiveBitrateEnabled.isChecked()
+        settings.adaptiveBitrateMinKbps = parseInt(this.adaptiveBitrateMinKbps.getValue())
+        settings.adaptiveBitrateMaxKbps = parseInt(this.adaptiveBitrateMaxKbps.getValue())
 
         return settings
     }

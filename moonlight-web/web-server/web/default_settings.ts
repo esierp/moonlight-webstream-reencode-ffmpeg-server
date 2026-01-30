@@ -26,6 +26,9 @@ const trueDefaultSettings: Settings =
     "serverReencodeBitrateKbps": 12000,
     "serverReencodePreset": "default",
     "serverReencodeThreads": 0,
+    "adaptiveBitrateEnabled": false,
+    "adaptiveBitrateMinKbps": 2000,
+    "adaptiveBitrateMaxKbps": 50000,
     "forceVideoElementRenderer": false,
     "canvasRenderer": false,
     // Canvas only: when true, draw only on requestAnimationFrame (stable, may add ~0–17 ms). When false, draw on frame submit (low latency).
