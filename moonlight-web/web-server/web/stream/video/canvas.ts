@@ -1,8 +1,8 @@
 import { globalObject, Pipe, PipeInfo } from "../pipeline/index.js"
 import { allVideoCodecs } from "../video.js"
-import { FrameVideoRenderer, getStreamRectCorrected, VideoRenderer, VideoRendererSetup } from "./index.js"
+import { CanvasRenderer, FrameVideoRenderer, getStreamRectCorrected, VideoRenderer, VideoRendererSetup } from "./index.js"
 
-export abstract class BaseCanvasVideoRenderer implements VideoRenderer {
+export abstract class BaseCanvasVideoRenderer implements VideoRenderer, CanvasRenderer {
 
     protected canvas: HTMLCanvasElement = document.createElement("canvas")
 
@@ -47,6 +47,28 @@ export abstract class BaseCanvasVideoRenderer implements VideoRenderer {
 
     getBase(): Pipe | null {
         return null
+    }
+
+    useCanvasContext(type: "2d" | "bitmaprenderer" | "webgl") {
+        const context = this.canvas.getContext(type as any)
+        if (!context) {
+            return { context: null, error: `Canvas context "${type}" not supported` }
+        }
+        return { context: context as any }
+    }
+
+    setCanvasSize(width: number, height: number) {
+        if (this.canvas.width !== width || this.canvas.height !== height) {
+            this.canvas.width = width
+            this.canvas.height = height
+        }
+    }
+
+    commitFrame() {
+        const canvasAny = this.canvas as any
+        if (typeof canvasAny.commit === "function") {
+            canvasAny.commit()
+        }
     }
 }
 
