@@ -31,7 +31,12 @@ jobs:
     - uses: actions/setup-node@v6
       with:
         node-version: 24
-    - run: sudo apt-get install clang -y
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          clang pkg-config \
+          libavutil-dev libavcodec-dev libavformat-dev libswscale-dev \
+          libavdevice-dev libavfilter-dev libswresample-dev
 
     - name: Run tests
       run: cargo test --workspace --locked --exclude moonlight-client-simple
