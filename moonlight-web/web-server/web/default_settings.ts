@@ -20,6 +20,12 @@ const trueDefaultSettings: Settings =
     },
     // possible values: "h264", "h265", "av1", "auto"
     "videoCodec": "h264",
+    "serverReencodeEnabled": false,
+    // possible values: "h264", "vp8"
+    "serverReencodeCodec": "h264",
+    "serverReencodeBitrateKbps": 12000,
+    "serverReencodePreset": "default",
+    "serverReencodeThreads": 0,
     "forceVideoElementRenderer": false,
     "canvasRenderer": false,
     // Canvas only: when true, draw only on requestAnimationFrame (stable, may add ~0–17 ms). When false, draw on frame submit (low latency).

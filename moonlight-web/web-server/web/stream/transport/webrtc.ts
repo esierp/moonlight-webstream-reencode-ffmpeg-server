@@ -42,8 +42,6 @@ export class WebRTCTransport implements Transport {
         // Maybe we already received data
         if (this.remoteDescription) {
             await this.handleRemoteDescription(this.remoteDescription)
-        } else {
-            await this.onNegotiationNeeded()
         }
         await this.tryDequeueIceCandidates()
     }
@@ -80,10 +78,21 @@ export class WebRTCTransport implements Transport {
         }
     }
 
+    private respondOnly = false
+
+    setRespondOnly(enabled: boolean) {
+        this.respondOnly = enabled
+    }
+
     private async onNegotiationNeeded() {
         // We're polite
         if (!this.peer) {
             this.logger?.debug("OnNegotiationNeeded without a peer")
+            return
+        }
+
+        if (this.respondOnly) {
+            this.logger?.debug("Ignoring negotiationneeded (respond-only mode)")
             return
         }
 
@@ -404,7 +413,17 @@ export class WebRTCTransport implements Transport {
     async close(): Promise<void> {
         this.logger?.debug("Closing WebRTC Peer")
 
-        this.peer?.close()
+        try {
+            this.peer?.close()
+        } finally {
+            this.peer = null
+            this.remoteDescription = null
+            this.iceCandidates.length = 0
+            this.channels.length = 0
+            this.onsendmessage = null
+            this.onconnect = null
+            this.onclose = null
+        }
     }
 
     async getStats(): Promise<Record<string, string>> {

@@ -12,6 +12,7 @@ import { LogMessageType, StreamCapabilities, StreamKeys } from "./api_bindings.j
 import { ScreenKeyboard, TextEvent } from "./screen_keyboard.js";
 import { FormModal } from "./component/modal/form.js";
 import { streamStatsToText } from "./stream/stats.js";
+import { buildUrl } from "./config_.js";
 
 async function startApp() {
     const api = await getApi()
@@ -50,6 +51,9 @@ async function startApp() {
     // Start and Mount App
     const app = new ViewerApp(api, hostId, appId)
     app.mount(rootElement);
+    ;import("./footer.js").then((mod: any) => {
+        mod?.addFooter?.()
+    });
 
     (window as any)["app"] = app
 }
@@ -73,7 +77,15 @@ class ViewerApp implements Component {
     private div = document.createElement("div")
 
     private statsDiv = document.createElement("div")
+    private statsText = document.createElement("pre")
+    private statsCanvas = document.createElement("canvas")
+    private incomingBandwidthHistory: number[] = []
+    private outgoingBandwidthHistory: number[] = []
     private stream: Stream | null = null
+    private debugLogLines: string[] = []
+    private pendingLogLines: string[] = []
+    private logFlushTimer: number | null = null
+    private debugLogModal = new DebugLogModal()
 
     private settings: Settings
 
@@ -81,6 +93,81 @@ class ViewerApp implements Component {
     private previousMouseMode: MouseMode
     private toggleFullscreenWithKeybind: boolean
     private hasShownFullscreenEscapeWarning = false
+
+    private pushBandwidthSample(incomingKbps: number, outgoingKbps: number) {
+        const maxSamples = 120
+        this.incomingBandwidthHistory.push(incomingKbps)
+        this.outgoingBandwidthHistory.push(outgoingKbps)
+
+        if (this.incomingBandwidthHistory.length > maxSamples) {
+            this.incomingBandwidthHistory.shift()
+        }
+        if (this.outgoingBandwidthHistory.length > maxSamples) {
+            this.outgoingBandwidthHistory.shift()
+        }
+    }
+
+    private renderBandwidthGraph() {
+        const canvas = this.statsCanvas
+        const ctx = canvas.getContext("2d")
+        if (!ctx) {
+            return
+        }
+
+        const maxWidth = Math.max(180, Math.floor(window.innerWidth * 0.6))
+        const width = Math.min(320, maxWidth)
+        const height = 90
+        const ratio = window.devicePixelRatio || 1
+        canvas.width = width * ratio
+        canvas.height = height * ratio
+        canvas.style.width = `${width}px`
+        canvas.style.height = `${height}px`
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+
+        ctx.clearRect(0, 0, width, height)
+        ctx.fillStyle = "rgba(0, 0, 0, 0.35)"
+        ctx.fillRect(0, 0, width, height)
+
+        const maxValue = Math.max(
+            1,
+            ...this.incomingBandwidthHistory,
+            ...this.outgoingBandwidthHistory,
+        )
+
+        const maxSamples = Math.max(
+            this.incomingBandwidthHistory.length,
+            this.outgoingBandwidthHistory.length,
+            2,
+        )
+
+        const drawLine = (values: number[], color: string) => {
+            if (values.length === 0) return
+            ctx.strokeStyle = color
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            values.forEach((value, index) => {
+                const x = (index / (maxSamples - 1)) * (width - 10) + 5
+                const y = height - 5 - (value / maxValue) * (height - 10)
+                if (index === 0) {
+                    ctx.moveTo(x, y)
+                } else {
+                    ctx.lineTo(x, y)
+                }
+            })
+            ctx.stroke()
+        }
+
+        drawLine(this.incomingBandwidthHistory, "#00f7ff")
+        drawLine(this.outgoingBandwidthHistory, "#ffb347")
+
+        ctx.fillStyle = "#00f7ff"
+        ctx.font = "12px sans-serif"
+        ctx.fillText("in", 8, 14)
+        ctx.fillStyle = "#ffb347"
+        ctx.fillText("out", 32, 14)
+        ctx.fillStyle = "#ffffff"
+        ctx.fillText(`${Math.round(maxValue)} kbps`, width - 90, 14)
+    }
 
     constructor(api: Api, hostId: number, appId: number) {
         this.api = api
@@ -92,6 +179,10 @@ class ViewerApp implements Component {
         // Configure stats element
         this.statsDiv.hidden = true
         this.statsDiv.classList.add("video-stats")
+        this.statsText.classList.add("video-stats-text")
+        this.statsCanvas.classList.add("video-stats-graph")
+        this.statsDiv.appendChild(this.statsText)
+        this.statsDiv.appendChild(this.statsCanvas)
 
         setInterval(() => {
             // Update stats display every 100ms
@@ -99,8 +190,14 @@ class ViewerApp implements Component {
             if (stats && stats.isEnabled()) {
                 this.statsDiv.hidden = false
 
-                const text = streamStatsToText(stats.getCurrentStats())
-                this.statsDiv.innerText = text
+                const current = stats.getCurrentStats()
+                const text = streamStatsToText(current)
+                this.statsText.innerText = text
+
+                if (current.incomingKbps != null && current.outgoingKbps != null) {
+                    this.pushBandwidthSample(current.incomingKbps, current.outgoingKbps)
+                    this.renderBandwidthGraph()
+                }
             } else {
                 this.statsDiv.hidden = true
             }
@@ -194,6 +291,10 @@ class ViewerApp implements Component {
             document.title = `Stream: ${app.title}`
         } else if (data.type == "connectionComplete") {
             this.sidebar.onCapabilitiesChange(data.capabilities)
+        } else if (data.type == "addDebugLine") {
+            this.pushDebugLine(data.line)
+        } else if (data.type == "serverMessage") {
+            this.pushDebugLine(`Server: ${data.message}`)
         }
     }
 
@@ -202,6 +303,62 @@ class ViewerApp implements Component {
             const inputElement = document.getElementById("input") as HTMLDivElement
             inputElement.focus()
         }
+    }
+
+    private pushDebugLine(line: string) {
+        const message = line.trim()
+        if (!message) {
+            return
+        }
+
+        const timestamp = new Date().toISOString()
+        const formatted = `[${timestamp}] ${message}`
+        this.debugLogLines.push(formatted)
+
+        if (this.debugLogLines.length > 800) {
+            this.debugLogLines.splice(0, this.debugLogLines.length - 800)
+        }
+
+        this.pendingLogLines.push(formatted)
+        this.scheduleLogFlush()
+
+        this.debugLogModal.setLogs(this.debugLogLines)
+    }
+
+    private scheduleLogFlush() {
+        if (this.logFlushTimer != null) {
+            return
+        }
+
+        this.logFlushTimer = window.setTimeout(() => {
+            this.logFlushTimer = null
+            this.flushLogs()
+        }, 1000)
+    }
+
+    private async flushLogs() {
+        if (this.pendingLogLines.length === 0) {
+            return
+        }
+
+        const lines = this.pendingLogLines.splice(0)
+
+        try {
+            await fetch(buildUrl("/api/client-log"), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ lines })
+            })
+        } catch (err) {
+            console.debug("Failed to upload logs", err)
+        }
+    }
+
+    showDebugLogs() {
+        this.debugLogModal.setLogs(this.debugLogLines)
+        showModal(this.debugLogModal)
     }
 
     onUserInteraction() {
@@ -530,6 +687,12 @@ class ViewerApp implements Component {
     getStream(): Stream | null {
         return this.stream
     }
+
+    async updateBitrateKbps(bitrateKbps: number) {
+        this.settings.serverReencodeEnabled = true
+        this.settings.serverReencodeBitrateKbps = bitrateKbps
+        await this.stream?.updateBitrateKbps(bitrateKbps)
+    }
 }
 
 class ConnectionInfoModal implements Modal<void> {
@@ -643,6 +806,64 @@ class ConnectionInfoModal implements Modal<void> {
     }
 }
 
+class DebugLogModal implements Modal<void> {
+    private root = document.createElement("div")
+    private text = document.createElement("p")
+    private closeButton = document.createElement("button")
+    private copyButton = document.createElement("button")
+    private logDisplay = document.createElement("pre")
+
+    constructor() {
+        this.root.classList.add("modal-video-connect")
+
+        this.text.innerText = "Logs"
+        this.root.appendChild(this.text)
+
+        this.copyButton.innerText = "Copy"
+        this.copyButton.addEventListener("click", this.onCopy.bind(this))
+        this.root.appendChild(this.copyButton)
+
+        this.closeButton.innerText = "Close"
+        this.root.appendChild(this.closeButton)
+
+        this.logDisplay.classList.add("textlike")
+        this.logDisplay.classList.add("modal-video-connect-debug")
+        this.root.appendChild(this.logDisplay)
+    }
+
+    setLogs(lines: string[]) {
+        this.logDisplay.innerText = lines.join("\n")
+    }
+
+    private async onCopy() {
+        const text = this.logDisplay.innerText
+        try {
+            await navigator.clipboard.writeText(text)
+        } catch {
+            const textarea = document.createElement("textarea")
+            textarea.value = text
+            document.body.appendChild(textarea)
+            textarea.select()
+            document.execCommand("copy")
+            document.body.removeChild(textarea)
+        }
+    }
+
+    onFinish(abort: AbortSignal): Promise<void> {
+        return new Promise((resolve) => {
+            this.closeButton.addEventListener("click", () => resolve(), { once: true, signal: abort })
+            abort.addEventListener("abort", () => resolve(), { once: true })
+        })
+    }
+
+    mount(parent: HTMLElement): void {
+        parent.appendChild(this.root)
+    }
+    unmount(parent: HTMLElement): void {
+        parent.removeChild(this.root)
+    }
+}
+
 class ViewerSidebar implements Component, Sidebar {
     private app: ViewerApp
 
@@ -659,6 +880,8 @@ class ViewerSidebar implements Component, Sidebar {
     private fullscreenButton = document.createElement("button")
 
     private statsButton = document.createElement("button")
+    private logButton = document.createElement("button")
+    private bitrateButton = document.createElement("button")
     private exitStreamButton = document.createElement("button")
 
     private mouseMode: SelectComponent
@@ -729,6 +952,38 @@ class ViewerSidebar implements Component, Sidebar {
         })
         this.buttonDiv.appendChild(this.statsButton)
 
+        // Logs
+        this.logButton.innerText = "Logs"
+        this.logButton.addEventListener("click", () => {
+            this.app.showDebugLogs()
+        })
+        this.buttonDiv.appendChild(this.logButton)
+
+        // Bitrate
+        this.bitrateButton.innerText = "Bitrate"
+        this.bitrateButton.addEventListener("click", async () => {
+            const stream = this.app.getStream()
+            if (!stream) {
+                return
+            }
+
+            const currentKbps = stream.getSettings().serverReencodeBitrateKbps ?? stream.getSettings().bitrate
+            const result = await showModal(new BitrateModal(currentKbps))
+            if (result == null) {
+                return
+            }
+
+            this.bitrateButton.disabled = true
+            this.exitStreamButton.disabled = true
+            try {
+                await this.app.updateBitrateKbps(result)
+            } finally {
+                this.bitrateButton.disabled = false
+                this.exitStreamButton.disabled = false
+            }
+        })
+        this.buttonDiv.appendChild(this.bitrateButton)
+
         // Close stream
         this.exitStreamButton.innerText = "Exit"
         this.exitStreamButton.addEventListener("click", async () => {
@@ -743,7 +998,7 @@ class ViewerSidebar implements Component, Sidebar {
             if (window.matchMedia('(display-mode: standalone)').matches) {
                 history.back()
             } else {
-                window.close()
+                window.location.href = "/"
             }
 
         })
@@ -819,6 +1074,68 @@ class ViewerSidebar implements Component, Sidebar {
     }
     unmount(parent: HTMLElement): void {
         parent.removeChild(this.div)
+    }
+}
+
+class BitrateModal extends FormModal<number> {
+    private slider: HTMLInputElement = document.createElement("input")
+    private valueLabel: HTMLSpanElement = document.createElement("span")
+    private currentKbps: number
+
+    constructor(currentKbps: number) {
+        super()
+        this.currentKbps = currentKbps
+
+        this.slider.type = "range"
+        this.slider.min = "0.125"
+        this.slider.max = "6.25"
+        this.slider.step = "0.05"
+        this.slider.value = this.kbpsToMbps(currentKbps).toFixed(3)
+
+        this.valueLabel.style.marginLeft = "8px"
+        this.slider.addEventListener("input", () => this.updateLabel())
+        this.updateLabel()
+    }
+
+    private kbpsToMbps(kbps: number): number {
+        return kbps / 8000
+    }
+
+    private mbpsToKbps(mbps: number): number {
+        return Math.round(mbps * 8000)
+    }
+
+    private updateLabel() {
+        const mbps = parseFloat(this.slider.value)
+        this.valueLabel.innerText = `${mbps.toFixed(2)} MB/s`
+    }
+
+    mountForm(form: HTMLFormElement): void {
+        const row = document.createElement("div")
+        row.style.display = "flex"
+        row.style.alignItems = "center"
+        row.style.gap = "8px"
+
+        const label = document.createElement("label")
+        label.innerText = "Bitrate (MB/s)"
+
+        row.appendChild(label)
+        row.appendChild(this.slider)
+        row.appendChild(this.valueLabel)
+        form.appendChild(row)
+    }
+
+    reset(): void {
+        this.slider.value = this.kbpsToMbps(this.currentKbps).toFixed(3)
+        this.updateLabel()
+    }
+
+    submit(): number | null {
+        const mbps = parseFloat(this.slider.value)
+        if (Number.isNaN(mbps)) {
+            return null
+        }
+        return this.mbpsToKbps(mbps)
     }
 }
 

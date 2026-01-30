@@ -17,6 +17,11 @@ export type Settings = {
     },
     fps: number
     videoCodec: StreamCodec,
+    serverReencodeEnabled: boolean
+    serverReencodeCodec: ReencodeCodec
+    serverReencodeBitrateKbps: number
+    serverReencodePreset: string
+    serverReencodeThreads: number
     forceVideoElementRenderer: boolean
     canvasRenderer: boolean
     canvasVsync: boolean
@@ -32,6 +37,7 @@ export type Settings = {
 }
 
 export type StreamCodec = "h264" | "auto" | "h265" | "av1"
+export type ReencodeCodec = "h264" | "vp8"
 export type TransportType = "auto" | "webrtc" | "websocket"
 
 import DEFAULT_SETTINGS from "../default_settings.js"
@@ -80,6 +86,11 @@ export class StreamSettingsComponent implements Component {
     private packetSize: InputComponent
     private fps: InputComponent
     private videoCodec: SelectComponent
+    private serverReencodeEnabled: InputComponent
+    private serverReencodeCodec: SelectComponent
+    private serverReencodeBitrateKbps: InputComponent
+    private serverReencodePreset: SelectComponent
+    private serverReencodeThreads: InputComponent
     private forceVideoElementRenderer: InputComponent
     private canvasRenderer: InputComponent
     private canvasVsync: InputComponent
@@ -169,6 +180,65 @@ export class StreamSettingsComponent implements Component {
         })
         this.fps.addChangeListener(this.onSettingsChange.bind(this))
         this.fps.mount(this.divElement)
+
+        // Server Re-Encode
+        this.serverReencodeEnabled = new InputComponent("serverReencodeEnabled", "checkbox", "Server Re-Encode", {
+            checked: settings?.serverReencodeEnabled ?? defaultSettings_.serverReencodeEnabled,
+        })
+        this.serverReencodeEnabled.addChangeListener(this.onSettingsChange.bind(this))
+        this.serverReencodeEnabled.mount(this.divElement)
+
+        this.serverReencodeCodec = new SelectComponent("serverReencodeCodec", [
+            { value: "h264", name: "H.264" },
+            { value: "vp8", name: "VP8" },
+        ], {
+            displayName: "Re-Encode Codec",
+            preSelectedOption: settings?.serverReencodeCodec ?? defaultSettings_.serverReencodeCodec,
+        })
+        this.serverReencodeCodec.addChangeListener(this.onSettingsChange.bind(this))
+        this.serverReencodeCodec.mount(this.divElement)
+
+        this.serverReencodeBitrateKbps = new InputComponent("serverReencodeBitrateKbps", "number", "Re-Encode Bitrate (kbps)", {
+            defaultValue: defaultSettings_.serverReencodeBitrateKbps.toString(),
+            value: settings?.serverReencodeBitrateKbps?.toString(),
+            step: "500",
+            numberSlider: {
+                range_min: 1000,
+                range_max: 50000,
+            }
+        })
+        this.serverReencodeBitrateKbps.addChangeListener(this.onSettingsChange.bind(this))
+        this.serverReencodeBitrateKbps.mount(this.divElement)
+
+        this.serverReencodePreset = new SelectComponent("serverReencodePreset", [
+            { value: "default", name: "Default" },
+            { value: "ultrafast", name: "ultrafast" },
+            { value: "superfast", name: "superfast" },
+            { value: "veryfast", name: "veryfast" },
+            { value: "faster", name: "faster" },
+            { value: "fast", name: "fast" },
+            { value: "medium", name: "medium" },
+            { value: "slow", name: "slow" },
+            { value: "slower", name: "slower" },
+            { value: "veryslow", name: "veryslow" },
+        ], {
+            displayName: "Re-Encode Preset",
+            preSelectedOption: settings?.serverReencodePreset ?? defaultSettings_.serverReencodePreset,
+        })
+        this.serverReencodePreset.addChangeListener(this.onSettingsChange.bind(this))
+        this.serverReencodePreset.mount(this.divElement)
+
+        this.serverReencodeThreads = new InputComponent("serverReencodeThreads", "number", "Re-Encode Threads (0 = auto)", {
+            defaultValue: defaultSettings_.serverReencodeThreads.toString(),
+            value: settings?.serverReencodeThreads?.toString(),
+            step: "1",
+            numberSlider: {
+                range_min: 0,
+                range_max: 64,
+            }
+        })
+        this.serverReencodeThreads.addChangeListener(this.onSettingsChange.bind(this))
+        this.serverReencodeThreads.mount(this.divElement)
 
         // Video Size
         this.videoSize = new SelectComponent("videoSize",
@@ -425,6 +495,12 @@ export class StreamSettingsComponent implements Component {
         settings.hdr = this.hdr.isChecked()
 
         settings.useSelectElementPolyfill = this.useSelectElementPolyfill.isChecked()
+
+        settings.serverReencodeEnabled = this.serverReencodeEnabled.isChecked()
+        settings.serverReencodeCodec = this.serverReencodeCodec.getValue() as any
+        settings.serverReencodeBitrateKbps = parseInt(this.serverReencodeBitrateKbps.getValue())
+        settings.serverReencodePreset = this.serverReencodePreset.getValue() ?? defaultSettings().serverReencodePreset
+        settings.serverReencodeThreads = parseInt(this.serverReencodeThreads.getValue())
 
         return settings
     }

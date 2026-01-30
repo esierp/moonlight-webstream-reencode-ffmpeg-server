@@ -27,6 +27,9 @@ async function startApp() {
 
     const app = new AdminApp(api)
     app.mount(rootElement)
+    ;import("./footer.js").then((mod: any) => {
+        mod?.addFooter?.()
+    });
 
     app.forceFetch()
 }
