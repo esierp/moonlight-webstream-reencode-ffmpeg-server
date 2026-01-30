@@ -204,6 +204,17 @@ impl TransportSender for WebSocketTransportSender {
         Ok(DecodeResult::Ok)
     }
 
+    async fn send_h264_annexb(
+        &self,
+        _data: &[u8],
+        _rtp_timestamp: u32,
+        _is_keyframe: bool,
+    ) -> Result<(), TransportError> {
+        Err(TransportError::Implementation(anyhow::anyhow!(
+            "server-side encoded video not supported over websocket transport",
+        )))
+    }
+
     async fn setup_audio(
         &self,
         _audio_config: AudioConfig,
@@ -287,6 +298,7 @@ impl TransportSender for WebSocketTransportSender {
                 video_colorspace,
                 video_color_range_full,
                 hdr,
+                reencode,
             }) => {
                 let video_supported_formats = SupportedVideoFormats::from_bits(video_supported_formats).unwrap_or_else(|| {
                     warn!("Failed to deserialize SupportedVideoFormats: {video_supported_formats}, falling back to only H264");
@@ -307,6 +319,7 @@ impl TransportSender for WebSocketTransportSender {
                             video_colorspace: video_colorspace.into(),
                             play_audio_local,
                             hdr,
+                            reencode,
                         },
                     })
                     .await

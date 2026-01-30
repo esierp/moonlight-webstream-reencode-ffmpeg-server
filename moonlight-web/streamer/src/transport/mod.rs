@@ -625,6 +625,14 @@ pub trait TransportSender {
         unit: &'a VideoDecodeUnit<'a>,
     ) -> Result<DecodeResult, TransportError>;
 
+    /// Send already-encoded H.264 Annex-B data (server-side decode/encode path)
+    async fn send_h264_annexb(
+        &self,
+        data: &[u8],
+        rtp_timestamp: u32,
+        is_keyframe: bool,
+    ) -> Result<(), TransportError>;
+
     async fn setup_audio(
         &self,
         audio_config: AudioConfig,

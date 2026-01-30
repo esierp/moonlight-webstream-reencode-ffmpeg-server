@@ -233,13 +233,30 @@ impl WebRtcVideo {
 
         let important = matches!(unit.frame_type, FrameType::Idr);
 
+        self.send_annexb(&full_frame, timestamp, important).await;
+
+        trace!("Ending frame frame");
+
+        if self
+            .needs_idr
+            .compare_exchange_weak(true, false, Ordering::SeqCst, Ordering::Relaxed)
+            .is_ok()
+        {
+            return DecodeResult::NeedIdr;
+        }
+
+        DecodeResult::Ok
+    }
+
+    /// Send already-encoded Annex-B data (used for server-side transcode path)
+    pub async fn send_annexb(&mut self, annexb: &[u8], timestamp: u32, important: bool) {
         match &mut self.codec {
             // -- H264
             Some(VideoCodec::H264 {
                 nal_reader,
                 payloader,
             }) => {
-                nal_reader.reset(Cursor::new(full_frame));
+                nal_reader.reset(Cursor::new(annexb.to_vec()));
 
                 while let Ok(Some(nal)) = nal_reader.next_nal() {
                     trace!(
@@ -275,7 +292,7 @@ impl WebRtcVideo {
                 nal_reader,
                 payloader,
             }) => {
-                nal_reader.reset(Cursor::new(full_frame));
+                nal_reader.reset(Cursor::new(annexb.to_vec()));
 
                 while let Ok(Some(nal)) = nal_reader.next_nal() {
                     trace!(
@@ -303,7 +320,7 @@ impl WebRtcVideo {
             }
             // -- AV1
             Some(VideoCodec::Av1 { annex_b, payloader }) => {
-                annex_b.reset(Cursor::new(full_frame));
+                annex_b.reset(Cursor::new(annexb.to_vec()));
 
                 while let Ok(Some(annex_b_payload)) = annex_b.next() {
                     let data =
@@ -326,18 +343,6 @@ impl WebRtcVideo {
                 warn!("Failed to send decode unit because of missing codec!");
             }
         }
-
-        trace!("Ending frame frame");
-
-        if self
-            .needs_idr
-            .compare_exchange_weak(true, false, Ordering::SeqCst, Ordering::Relaxed)
-            .is_ok()
-        {
-            return DecodeResult::NeedIdr;
-        }
-
-        DecodeResult::Ok
     }
 }
 

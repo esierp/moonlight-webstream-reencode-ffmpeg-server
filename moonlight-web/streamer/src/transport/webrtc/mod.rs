@@ -393,6 +393,7 @@ impl WebRtcInner {
                 video_colorspace,
                 video_color_range_full,
                 hdr,
+                reencode,
             } => {
                 let video_supported_formats = SupportedVideoFormats::from_bits(video_supported_formats).unwrap_or_else(|| {
                     warn!("Failed to deserialize SupportedVideoFormats: {video_supported_formats}, falling back to only H264");
@@ -419,6 +420,7 @@ impl WebRtcInner {
                             video_colorspace: video_colorspace.into(),
                             play_audio_local,
                             hdr,
+                            reencode,
                         },
                     })
                     .await
@@ -654,6 +656,17 @@ impl TransportSender for WebRTCTransportSender {
     ) -> Result<DecodeResult, TransportError> {
         let mut video = self.inner.video.lock().await;
         Ok(video.send_decode_unit(unit).await)
+    }
+
+    async fn send_h264_annexb(
+        &self,
+        data: &[u8],
+        rtp_timestamp: u32,
+        is_keyframe: bool,
+    ) -> Result<(), TransportError> {
+        let mut video = self.inner.video.lock().await;
+        video.send_annexb(data, rtp_timestamp, is_keyframe).await;
+        Ok(())
     }
 
     async fn setup_audio(
