@@ -3,6 +3,7 @@ import { Api, getApi } from "./api.js";
 import { Component } from "./component/index.js";
 import { showErrorPopup } from "./component/error.js";
 import { InfoEvent, Stream } from "./stream/index.js"
+import { TouchController } from "./stream/touch_controller.js"
 import { getModalBackground, Modal, showMessage, showModal } from "./component/modal/index.js";
 import { getSidebarRoot, setSidebar, setSidebarExtended, setSidebarStyle, Sidebar } from "./component/sidebar/index.js";
 import { defaultStreamInputConfig, MouseMode, ScreenKeyboardSetVisibleEvent, StreamInputConfig } from "./stream/input.js";
@@ -83,6 +84,8 @@ class ViewerApp implements Component {
     private incomingBandwidthHistory: number[] = []
     private outgoingBandwidthHistory: number[] = []
     private stream: Stream | null = null
+    private touchController: TouchController | null = null
+    private touchControllerEnabled: boolean = false
     private debugLogLines: string[] = []
     private pendingLogLines: string[] = []
     private logFlushTimer: number | null = null
@@ -302,6 +305,10 @@ class ViewerApp implements Component {
         this.stream.getInput().addScreenKeyboardVisibleEvent(this.onScreenKeyboardSetVisible.bind(this))
 
         this.stream.mount(this.div)
+
+        this.touchController = new TouchController(this.stream.getInput())
+        this.touchController.mount(this.div)
+        this.updateTouchControllerVisibility()
     }
 
     private async onInfo(event: InfoEvent) {
@@ -381,6 +388,11 @@ class ViewerApp implements Component {
     showDebugLogs() {
         this.debugLogModal.setLogs(this.debugLogLines)
         showModal(this.debugLogModal)
+    }
+
+    toggleTouchController() {
+        this.touchControllerEnabled = !this.touchControllerEnabled
+        this.updateTouchControllerVisibility()
     }
 
     onUserInteraction() {
@@ -618,6 +630,7 @@ class ViewerApp implements Component {
     }
     private async onFullscreenChange() {
         this.checkFullyImmersed()
+        this.updateTouchControllerVisibility()
     }
 
     // Pointer Lock
@@ -692,6 +705,14 @@ class ViewerApp implements Component {
         } else {
             setSidebar(this.sidebar)
         }
+    }
+
+    private updateTouchControllerVisibility() {
+        if (!this.touchController) {
+            return
+        }
+        const shouldShow = this.touchControllerEnabled && this.isFullscreen()
+        this.touchController.setVisible(shouldShow)
     }
 
     mount(parent: HTMLElement): void {
@@ -950,6 +971,7 @@ class ViewerSidebar implements Component, Sidebar {
     private fullscreenButton = document.createElement("button")
 
     private statsButton = document.createElement("button")
+    private touchControllerButton = document.createElement("button")
     private logButton = document.createElement("button")
     private bitrateButton = document.createElement("button")
     private exitStreamButton = document.createElement("button")
@@ -1021,6 +1043,13 @@ class ViewerSidebar implements Component, Sidebar {
             }
         })
         this.buttonDiv.appendChild(this.statsButton)
+
+        // Touch Controller
+        this.touchControllerButton.innerText = "Touch Ctrl"
+        this.touchControllerButton.addEventListener("click", () => {
+            this.app.toggleTouchController()
+        })
+        this.buttonDiv.appendChild(this.touchControllerButton)
 
         // Logs
         this.logButton.innerText = "Logs"
