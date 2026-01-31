@@ -79,6 +79,9 @@ export class StreamInput {
     private controllers: DataTransportChannel | null = null
     private controllerInputs: Array<DataTransportChannel | null> = []
 
+    private pendingControllerAdds: Array<{ id: number, supportedButtons: number, capabilities: number }> = []
+    private pendingControllerRemovals: Array<number> = []
+
     private touchSupported: boolean | null = null
 
     constructor(config?: StreamInputConfig) {
@@ -120,6 +123,8 @@ export class StreamInput {
 
             this.controllerInputs[i] = this.getDataChannel(transport, channelId)
         }
+
+        this.flushPendingControllerUpdates()
     }
 
     setConfig(config: StreamInputConfig) {
@@ -645,6 +650,26 @@ export class StreamInput {
         }
     }
 
+    private flushPendingControllerUpdates() {
+        if (!this.controllers) {
+            return
+        }
+
+        if (this.pendingControllerAdds.length > 0) {
+            const pendingAdds = this.pendingControllerAdds.splice(0)
+            for (const pending of pendingAdds) {
+                this.sendControllerAdd(pending.id, pending.supportedButtons, pending.capabilities)
+            }
+        }
+
+        if (this.pendingControllerRemovals.length > 0) {
+            const pendingRemovals = this.pendingControllerRemovals.splice(0)
+            for (const id of pendingRemovals) {
+                this.sendControllerRemove(id)
+            }
+        }
+    }
+
     private collectActuators(gamepad: Gamepad): Array<GamepadHapticActuator> {
         const actuators = []
         if ("vibrationActuator" in gamepad && gamepad.vibrationActuator) {
@@ -892,6 +917,12 @@ export class StreamInput {
 
     // -- Controller Sending
     sendControllerAdd(id: number, supportedButtons: number, capabilities: number) {
+        if (!this.controllers) {
+            this.pendingControllerRemovals = this.pendingControllerRemovals.filter(existing => existing !== id)
+            this.pendingControllerAdds.push({ id, supportedButtons, capabilities })
+            return
+        }
+
         this.buffer.reset()
 
         this.buffer.putU8(0)
@@ -902,6 +933,12 @@ export class StreamInput {
         trySendChannel(this.controllers, this.buffer)
     }
     sendControllerRemove(id: number) {
+        if (!this.controllers) {
+            this.pendingControllerAdds = this.pendingControllerAdds.filter(existing => existing.id !== id)
+            this.pendingControllerRemovals.push(id)
+            return
+        }
+
         this.buffer.reset()
 
         this.buffer.putU8(1)
