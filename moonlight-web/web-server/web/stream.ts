@@ -711,7 +711,7 @@ class ViewerApp implements Component {
         if (!this.touchController) {
             return
         }
-        const shouldShow = this.touchControllerEnabled && this.isFullscreen()
+        const shouldShow = this.touchControllerEnabled
         this.touchController.setVisible(shouldShow)
     }
 
