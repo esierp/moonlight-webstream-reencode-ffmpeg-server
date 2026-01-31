@@ -98,7 +98,6 @@ class ViewerApp implements Component {
 
     private inputConfig: StreamInputConfig = defaultStreamInputConfig()
     private previousMouseMode: MouseMode
-    private previousTouchMode: StreamInputConfig["touchMode"] | null = null
     private toggleFullscreenWithKeybind: boolean
     private hasShownFullscreenEscapeWarning = false
 
@@ -714,20 +713,6 @@ class ViewerApp implements Component {
         }
         const shouldShow = this.touchControllerEnabled && this.isFullscreen()
         this.touchController.setVisible(shouldShow)
-
-        if (this.settings.touchDisableMouseInput) {
-            if (shouldShow) {
-                if (this.previousTouchMode == null) {
-                    this.previousTouchMode = this.inputConfig.touchMode
-                }
-                this.inputConfig.touchMode = "touch"
-                this.setInputConfig(this.inputConfig)
-            } else if (this.previousTouchMode != null) {
-                this.inputConfig.touchMode = this.previousTouchMode
-                this.previousTouchMode = null
-                this.setInputConfig(this.inputConfig)
-            }
-        }
     }
 
     mount(parent: HTMLElement): void {
@@ -1134,7 +1119,8 @@ class ViewerSidebar implements Component, Sidebar {
         this.touchMode = new SelectComponent("touchMode", [
             { value: "touch", name: "Touch" },
             { value: "mouseRelative", name: "Relative" },
-            { value: "pointAndDrag", name: "Point and Drag" }
+            { value: "pointAndDrag", name: "Point and Drag" },
+            { value: "disabled", name: "Disabled" }
         ], {
             displayName: "Touch Mode",
             preSelectedOption: this.app.getInputConfig().touchMode

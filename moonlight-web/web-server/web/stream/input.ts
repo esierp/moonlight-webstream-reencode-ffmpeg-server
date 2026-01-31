@@ -39,7 +39,7 @@ export type MouseMode = "relative" | "follow" | "pointAndDrag"
 export type StreamInputConfig = {
     mouseMode: MouseMode
     mouseScrollMode: MouseScrollMode
-    touchMode: "touch" | "mouseRelative" | "pointAndDrag"
+    touchMode: "touch" | "mouseRelative" | "pointAndDrag" | "disabled"
     controllerConfig: ControllerConfig
 }
 
@@ -430,6 +430,10 @@ export class StreamInput {
     }
 
     onTouchStart(event: TouchEvent, rect: DOMRect) {
+        if (this.config.touchMode == "disabled") {
+            return
+        }
+
         for (const touch of event.changedTouches) {
             this.updateTouchTracker(touch)
         }
@@ -473,6 +477,9 @@ export class StreamInput {
     }
 
     onTouchUpdate(rect: DOMRect) {
+        if (this.config.touchMode == "disabled") {
+            return
+        }
         if (this.config.touchMode == "pointAndDrag") {
             if (this.primaryTouch == null) {
                 return
@@ -492,6 +499,9 @@ export class StreamInput {
     }
 
     onTouchMove(event: TouchEvent, rect: DOMRect) {
+        if (this.config.touchMode == "disabled") {
+            return
+        }
         if (this.config.touchMode == "touch") {
             for (const touch of event.changedTouches) {
                 this.sendTouch(1, touch, rect)
@@ -557,6 +567,9 @@ export class StreamInput {
     }
 
     onTouchEnd(event: TouchEvent, rect: DOMRect) {
+        if (this.config.touchMode == "disabled") {
+            return
+        }
         if (this.config.touchMode == "touch") {
             for (const touch of event.changedTouches) {
                 this.sendTouch(2, touch, rect)
