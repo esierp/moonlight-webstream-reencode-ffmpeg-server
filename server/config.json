@@ -1,9 +1,12 @@
 {
   "web_server": {
     "bind_address": "0.0.0.0:8080",
-    "certificate": null,
+    "certificate": {
+      "private_key_pem": "server/key.pem",
+      "certificate_pem": "server/cert.pem"
+    },
     "url_path_prefix": "",
-    "session_cookie_secure": false,
+    "session_cookie_secure": true,
     "session_cookie_expiration": {
       "secs": 86400,
       "nanos": 0

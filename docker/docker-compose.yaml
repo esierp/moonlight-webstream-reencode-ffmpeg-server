@@ -11,8 +11,4 @@ services:
     environment:
       - WEBRTC_NAT_1TO1_HOST=127.0.0.1 # Set this to your LAN ip or public ip
     volumes:
-      - moonlight-server:/moonlight-web/server
-
-volumes:
-  moonlight-server:
-    name: moonlight-server
+      - ../server:/moonlight-web/server

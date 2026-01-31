@@ -5,3 +5,8 @@ ignore
 
 # VsCode
 .vscode
+
+# Server runtime files
+/server/*.pem
+/server/data.json
+/server/client-logs.txt
