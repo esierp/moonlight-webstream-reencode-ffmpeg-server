@@ -37,8 +37,6 @@ export class TouchController {
     private input: StreamInput
     private logDebug: ((message: string) => void) | null = null
     private enabled = false
-    private registered = false
-    private initialStateRetries = 0
     private state: GamepadState = emptyGamepadState()
     private lastSent: GamepadState = emptyGamepadState()
 
@@ -54,7 +52,6 @@ export class TouchController {
         this.root.style.display = "none"
 
         this.buildLayout()
-        this.registerController()
     }
 
     mount(parent: HTMLElement) {
@@ -70,39 +67,17 @@ export class TouchController {
 
         if (visible) {
             this.logDebug?.("[TouchController] Enabled")
+            this.input.sendControllerAdd(VIRTUAL_CONTROLLER_ID, SUPPORTED_BUTTONS, 0)
             this.sendState(true)
         } else {
             this.logDebug?.("[TouchController] Disabled")
             this.resetState()
+            this.input.sendControllerRemove(VIRTUAL_CONTROLLER_ID)
         }
     }
 
     isVisible(): boolean {
         return this.enabled
-    }
-
-    private registerController() {
-        if (this.registered) {
-            return
-        }
-        this.registered = true
-        this.logDebug?.("[TouchController] Register controller")
-        this.input.sendControllerAdd(VIRTUAL_CONTROLLER_ID, SUPPORTED_BUTTONS, 0)
-        this.sendInitialStateWhenReady()
-    }
-
-    private sendInitialStateWhenReady() {
-        if (this.input.isControllerChannelReady(VIRTUAL_CONTROLLER_ID)) {
-            this.logDebug?.("[TouchController] Send initial state")
-            this.sendState(true)
-            return
-        }
-        if (this.initialStateRetries >= 20) {
-            this.logDebug?.("[TouchController] Controller channel not ready for initial state")
-            return
-        }
-        this.initialStateRetries += 1
-        setTimeout(() => this.sendInitialStateWhenReady(), 200)
     }
 
     private resetState() {
