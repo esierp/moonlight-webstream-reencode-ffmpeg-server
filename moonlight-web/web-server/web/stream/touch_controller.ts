@@ -37,6 +37,7 @@ export class TouchController {
     private input: StreamInput
     private logDebug: ((message: string) => void) | null = null
     private enabled = false
+    private registered = false
     private state: GamepadState = emptyGamepadState()
     private lastSent: GamepadState = emptyGamepadState()
 
@@ -52,6 +53,7 @@ export class TouchController {
         this.root.style.display = "none"
 
         this.buildLayout()
+        this.registerController()
     }
 
     mount(parent: HTMLElement) {
@@ -67,17 +69,24 @@ export class TouchController {
 
         if (visible) {
             this.logDebug?.("[TouchController] Enabled")
-            this.input.sendControllerAdd(VIRTUAL_CONTROLLER_ID, SUPPORTED_BUTTONS, 0)
             this.sendState(true)
         } else {
             this.logDebug?.("[TouchController] Disabled")
             this.resetState()
-            this.input.sendControllerRemove(VIRTUAL_CONTROLLER_ID)
         }
     }
 
     isVisible(): boolean {
         return this.enabled
+    }
+
+    private registerController() {
+        if (this.registered) {
+            return
+        }
+        this.registered = true
+        this.logDebug?.("[TouchController] Register controller")
+        this.input.sendControllerAdd(VIRTUAL_CONTROLLER_ID, SUPPORTED_BUTTONS, 0)
     }
 
     private resetState() {
