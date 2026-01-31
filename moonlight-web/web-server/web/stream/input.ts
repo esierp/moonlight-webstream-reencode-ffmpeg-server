@@ -1010,4 +1010,8 @@ export class StreamInput {
         trySendChannel(this.controllerInputs[id], this.buffer)
     }
 
+    isControllerChannelReady(id: number): boolean {
+        return !!this.controllerInputs[id]
+    }
+
 }
